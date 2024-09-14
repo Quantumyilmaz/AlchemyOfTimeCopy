@@ -126,7 +126,7 @@ struct StageInstance {
     void RemoveTransform(const float curr_time);
 
     // use only for WO (e.g. HandleDrop)
-    inline void RemoveTimeMod(const float time);
+    void RemoveTimeMod(const float time);
 
     inline const float GetDelayMagnitude() const { return GetDelaySlope(); }
 
@@ -185,3 +185,5 @@ struct DefaultSettings {
 private:
     bool init_failed = false;
 };
+
+using CustomSettings = std::map<std::vector<std::string>, DefaultSettings>;

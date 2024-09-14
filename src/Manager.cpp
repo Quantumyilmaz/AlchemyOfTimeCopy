@@ -420,7 +420,7 @@ inline const RE::ObjectRefHandle Manager::RemoveItemReverse(RE::TESObjectREFR* m
                 logger::trace("Removing item reverse with extra data.");
                 ref_handle = moveFrom->RemoveItem(item_obj, count, reason, asd->front(), moveTo);
             }
-            // Utilities::FunctionsSkyrim::Menu::SendInventoryUpdateMessage(moveFrom, item_obj);
+            // Menu::SendInventoryUpdateMessage(moveFrom, item_obj);
             break;
         }
     }
@@ -466,7 +466,7 @@ void Manager::AddItem(RE::TESObjectREFR* addTo, RE::TESObjectREFR* addFrom, Form
         logger::trace("Refreshing inventory for newly added item.");
         RE::SendUIMessage::SendInventoryUpdateMessage(addTo, bound);
     });
-    // Utilities::FunctionsSkyrim::Menu::SendInventoryUpdateMessage(addTo, bound);
+    // Menu::SendInventoryUpdateMessage(addTo, bound);
 }
 
 bool Manager::_UpdateStagesInSource(std::vector<RE::TESObjectREFR*> refs, Source& src, const float curr_time)
@@ -887,6 +887,660 @@ const bool Manager::RegisterAndGo(RE::TESObjectREFR* wo_ref)
     return RegisterAndGo(wo_bound->GetFormID(), wo_ref->extraList.GetCount(), wo_refid);
 }
 
+bool Manager::HandleDropCheck(RE::TESObjectREFR* ref)
+{
+    if (ref->IsDisabled()) {
+        logger::warn("HandleDropCheck: Ref is disabled.");
+        return false;
+    }
+    if (ref->IsDeleted()) {
+        logger::warn("HandleDropCheck: Ref is deleted.");
+        return false;
+    }
+    if (ref->IsMarkedForDeletion()) {
+        logger::warn("HandleDropCheck: Ref is marked for deletion.");
+        return false;
+    }
+    // if (!ref->Is3DLoaded()) {
+    //     logger::warn("HandleDropCheck: Ref is not 3D loaded.");
+    //     return;
+    // }
+    if (ref->IsActivationBlocked()) {
+        logger::warn("HandleDropCheck: Ref is activation blocked.");
+        return false;
+    }
+    if (std::string(ref->GetName()).empty()) {
+        logger::warn("HandleDropCheck: Ref name is empty.");
+        return false;
+    }
+
+    return true;
+}
+void Manager::HandleDrop(const FormID dropped_formid, Count count, RE::TESObjectREFR* dropped_stage_ref)
+ {
+
+    if (!dropped_formid) return RaiseMngrErr("Formid is null.");
+    if (!dropped_stage_ref) return RaiseMngrErr("Ref is null.");
+    if (!count) {
+        logger::warn("Count is 0.");
+        return;
+    }
+
+    // mutex.lock();
+
+    logger::trace("HandleDrop: dropped_formid {} , Count {}", dropped_formid, count);
+    if (!dropped_stage_ref) return RaiseMngrErr("Ref is null.");
+
+    auto source = GetSource(dropped_formid);
+    if (!source) {
+        logger::warn("HandleDrop: Source not found! Can be if it was never registered before.");
+        return;
+    } else if (!source->IsHealthy()) {
+        logger::warn("HandleDrop: Source is not healthy!");
+        return;
+    } else if (!source->IsStage(dropped_formid)) {
+        logger::warn("HandleDrop: Dropped form is not a stage.");
+        return;
+    }
+
+    CleanUpSourceData(source);  // to ausschliessen decayed items
+    // source->PrintData();
+    //  print radius just for testing
+    logger::trace("Radius: {}", WorldObject::GetDistanceFromPlayer(dropped_stage_ref));
+
+    // count ve hotkey consume muhabbetleri... ay ay ay
+    if (RefIsRegistered(dropped_stage_ref->GetFormID())) {
+        // eventsink bazen bugliyodu ayni refe gosteriyodu countlar split olunca
+        // ama extrayi attiimdan beri olmuyodu
+        logger::warn("Ref is registered at HandleDrop! Deregistering...");
+        auto& st_inst = source->data.at(dropped_stage_ref->GetFormID());
+        for (auto& inst : st_inst) inst.count = 0;
+        HandleConsume(dropped_formid);
+        /*const auto curr_count = dropped_stage_ref->extraList.GetCount();
+        WorldObject::SetObjectCount(dropped_stage_ref, count + curr_count);*/
+        return;
+    } 
+    else if (dropped_stage_ref->extraList.GetCount() != count) {
+        logger::warn("HandleDrop: Count mismatch: {} , {}", dropped_stage_ref->extraList.GetCount(), count);
+        // try to assign stage instances to the dropped item
+        const auto refid = dropped_stage_ref->GetFormID();
+        source->MoveInstances(player_refid, refid, dropped_formid, count, true);
+        // remove all instances except the first one
+        auto& vec = source->data.at(refid);
+        for (size_t i = 0; i < vec.size(); ++i) {
+            if (i == 0)
+                vec[i].count = count;
+            else
+                vec[i].count = 0;
+        }
+        // source->CleanUpData();
+        /*return _HandleDrop2(source,dropped_stage_ref, count);*/
+        auto& st_inst = source->data.at(refid)[0];
+        const auto hitting_time = source->GetNextUpdateTime(&st_inst);
+        QueueWOUpdate(refid, hitting_time);
+        return;
+    }
+
+    // at the same stage but different start times
+    std::vector<size_t> instances_candidates = {};
+    if (source->data.contains(player_refid)) {
+        size_t index__ = 0;
+        for (auto& st_inst : source->data.at(player_refid)) {
+            if (st_inst.xtra.form_id == dropped_formid) {
+                instances_candidates.push_back(index__);
+            }
+            index__++;
+        }
+    }
+    if (instances_candidates.empty()) {
+        logger::error("HandleDrop: No instances found. Can be when dropping not yet registered stage items.");
+        return;
+    }
+    // need to now order the instances_candidates by their elapsed times
+    const auto curr_time = RE::Calendar::GetSingleton()->GetHoursPassed();
+    std::sort(instances_candidates.begin(), instances_candidates.end(), [source, curr_time](size_t a, size_t b) {
+        return source->data.at(player_refid)[a].GetElapsed(curr_time) >
+                source->data.at(player_refid)[b].GetElapsed(curr_time);  // use up the old stuff first
+    });
+
+    logger::trace("HandleDrop: setting count");
+
+    for (const auto& i : Settings::xRemove) {
+        dropped_stage_ref->extraList.RemoveByType(static_cast<RE::ExtraDataType>(i));
+    }
+
+    logger::trace("HandleDrop: asd1");
+
+    bool handled_first_stack = false;
+    std::vector<size_t> removed_indices;
+    for (size_t index : instances_candidates) {
+        if (!count) break;
+        StageInstance* instance = nullptr;
+        if (removed_indices.empty()) {
+            instance = &source->data.at(player_refid)[index];
+        } else {
+            int shift = 0;
+            for (size_t removed_index : removed_indices) {
+                if (index == removed_index) return RaiseMngrErr("HandleDrop: Index already removed.");
+                if (index > removed_index) shift++;
+            }
+            instance = &source->data.at(player_refid)[index - shift];
+        }
+
+        if (count <= instance->count) {
+            logger::trace("instance count: {} vs count {}", instance->count, count);
+            instance->count -= count;
+            logger::trace("instance count: {} vs count {}", instance->count, count);
+
+            StageInstance new_instance(*instance);
+            new_instance.count = count;
+            new_instance.RemoveTimeMod(curr_time);
+            const auto hitting_time = source->GetNextUpdateTime(&new_instance);
+
+            if (!handled_first_stack) {
+                logger::trace("SADSJFHOADF 1");
+                if (WorldObject::GetObjectCount(dropped_stage_ref) !=
+                    static_cast<int16_t>(count)) {
+                    WorldObject::SetObjectCount(dropped_stage_ref, count);
+                }
+                // dropped_stage_ref->extraList.SetOwner(RE::TESForm::LookupByID<RE::TESForm>(0x07));
+                if (!source->InsertNewInstance(new_instance, dropped_stage_ref->GetFormID())) {
+                    return RaiseMngrErr("HandleDrop: InsertNewInstance failed.");
+                }
+                auto bound = new_instance.xtra.is_fake ? source->GetBoundObject() : nullptr;
+                ApplyStageInWorld(dropped_stage_ref, source->GetStage(new_instance.no), bound);
+                handled_first_stack = true;
+                // queue wo update
+                QueueWOUpdate(dropped_stage_ref->GetFormID(), hitting_time);
+            } else {
+                logger::trace("SADSJFHOADF 2");
+                const auto bound_to_drop = instance->xtra.is_fake ? source->GetBoundObject() : instance->GetBound();
+                auto new_ref =
+                    WorldObject::DropObjectIntoTheWorld(bound_to_drop, count);
+                if (!new_ref) return RaiseMngrErr("HandleDrop: New ref is null.");
+                if (new_ref->extraList.GetCount() != count) {
+                    logger::warn("HandleDrop: NewRefCount mismatch: {} , {}", new_ref->extraList.GetCount(), count);
+                }
+                if (!source->InsertNewInstance(new_instance, new_ref->GetFormID())) {
+                    return RaiseMngrErr("HandleDrop: InsertNewInstance failed.");
+                }
+                if (new_instance.xtra.is_fake)
+                    _ApplyStageInWorld_Fake(new_ref, source->GetStage(new_instance.no).GetExtraText());
+                // queue wo update
+                QueueWOUpdate(new_ref->GetFormID(), hitting_time);
+            }
+            count = 0;
+            /*break;*/
+        } else {
+            logger::trace("instance count: {} vs count {}", instance->count, count);
+            count -= instance->count;
+            logger::trace("instance count: {} vs count {}", instance->count, count);
+
+            instance->RemoveTimeMod(curr_time);
+            const auto hitting_time = source->GetNextUpdateTime(instance);
+
+            removed_indices.push_back(index);
+
+            if (!handled_first_stack) {
+                logger::trace("SADSJFHOADF 3");
+                if (WorldObject::GetObjectCount(dropped_stage_ref) !=
+                    static_cast<int16_t>(count)) {
+                    WorldObject::SetObjectCount(dropped_stage_ref, instance->count);
+                }
+                // dropped_stage_ref->extraList.SetOwner(RE::TESForm::LookupByID<RE::TESForm>(0x07));
+                auto bound = instance->xtra.is_fake ? source->GetBoundObject() : nullptr;
+                const auto temp_stage_no = instance->no;
+                // queue wo update
+                QueueWOUpdate(dropped_stage_ref->GetFormID(), hitting_time);
+                // I NEED TO DO EVERYTHING THAT USES instance BEFORE MoveInstance!!!!!!!!
+                if (!source->MoveInstance(player_refid, dropped_stage_ref->GetFormID(), instance)) {
+                    return RaiseMngrErr("HandleDrop: MoveInstance failed.");
+                }
+                ApplyStageInWorld(dropped_stage_ref, source->GetStage(temp_stage_no), bound);
+                handled_first_stack = true;
+
+            } else {
+                logger::trace("SADSJFHOADF 4");
+                const auto temp_is_fake = instance->xtra.is_fake;
+                const char* extra_text = temp_is_fake ? source->GetStage(instance->no).GetExtraText() : nullptr;
+                const auto bound_to_drop = temp_is_fake ? source->GetBoundObject() : instance->GetBound();
+                auto new_ref =
+                    WorldObject::DropObjectIntoTheWorld(bound_to_drop, instance->count);
+                if (!new_ref) return RaiseMngrErr("HandleDrop: New ref is null.");
+                if (new_ref->extraList.GetCount() != instance->count) {
+                    logger::warn("HandleDrop: NewRefCount mismatch: {} , {}", new_ref->extraList.GetCount(),
+                                    instance->count);
+                }
+                // queue wo update
+                QueueWOUpdate(new_ref->GetFormID(), hitting_time);
+                // I NEED TO DO EVERYTHING THAT USES instance BEFORE MoveInstance!!!!!!!!
+                if (!source->MoveInstance(player_refid, new_ref->GetFormID(), instance)) {
+                    return RaiseMngrErr("HandleDrop: MoveInstance failed.");
+                }
+                if (temp_is_fake) _ApplyStageInWorld_Fake(new_ref, extra_text);
+            }
+        }
+    }
+
+    logger::trace("HandleDrop: asd2");
+
+    if (count > 0) {
+        logger::warn("HandleDrop: Count is still greater than 0. Dropping the rest to the world.");
+        auto dropbound = GetFormByID<RE::TESBoundObject>(dropped_formid);
+        auto new_ref = WorldObject::DropObjectIntoTheWorld(dropbound, count);
+        if (!new_ref) {
+            logger::error("HandleDrop: New ref is null.");
+            return;
+        }
+        const auto __stage_no = source->GetStageNo(dropped_formid);
+        if (!source->InitInsertInstanceWO(__stage_no, count, new_ref->GetFormID(),
+                                            RE::Calendar::GetSingleton()->GetHoursPassed())) {
+            return RaiseMngrErr("HandleDrop: InsertNewInstance failed 2.");
+        }
+        // AddItem(player_ref, nullptr, dropped_formid, count);
+        // queue wo update
+        QueueWOUpdate(new_ref->GetFormID(), source->GetNextUpdateTime(&source->data.at(new_ref->GetFormID())[0]));
+    }
+
+    logger::trace("HandleDrop: asd3");
+
+    // dropped_stage_ref->extraList.RemoveByType(RE::ExtraDataType::kOwnership);
+    //xData::PrintObjectExtraData(dropped_stage_ref);
+
+    logger::trace("HandleDrop: asd4");
+    UpdateStages(player_ref);
+    logger::trace("HandleDrop: asd5");
+
+    if (!source->data.empty()) CleanUpSourceData(source);
+    logger::trace("HandleDrop: asd6");
+
+    // source->PrintData();
+    // mutex.unlock();
+};
+
+void Manager::HandlePickUp(const FormID pickedup_formid, const Count count, const RefID wo_refid, const bool eat, RE::TESObjectREFR* npc_ref)
+ {
+    logger::trace("HandlePickUp: Formid {} , Count {} , Refid {}", pickedup_formid, count, wo_refid);
+    const RefID npc_refid = npc_ref ? npc_ref->GetFormID() : player_refid;
+    npc_ref = npc_ref ? npc_ref : player_ref;  // naming...for the sake of functionality
+    if (!RefIsRegistered(wo_refid)) {
+#ifndef NDEBUG
+        if (worldobjectsevolve) {
+            // bcs it shoulda been registered already before picking up (with some exceptions)
+            logger::warn("HandlePickUp: Not registered world object refid: {}, pickedup_formid: {}", wo_refid,
+                            pickedup_formid);
+        }
+#endif
+        if (!RegisterAndGo(pickedup_formid, count, npc_refid)) {
+            logger::warn("HandlePickUp: RegisterAndGo failed.");
+        }
+        return;
+    }
+    // so it was registered before
+    auto source = GetWOSource(wo_refid);
+    if (!source) return RaiseMngrErr("HandlePickUp: Source not found.");
+    if (!source->data.contains(wo_refid)) return RaiseMngrErr("HandlePickUp: Source data not found.");
+    auto st_inst = &source->data.at(wo_refid).back();
+    if (!st_inst) return RaiseMngrErr("HandlePickUp: st_inst not found.");
+    const auto instance_is_fake = st_inst->xtra.is_fake;
+    const auto instance_formid = st_inst->xtra.form_id;
+    const auto instance_bound = st_inst->GetBound();
+    // I NEED TO DO EVERYTHING THAT USES instance BEFORE MoveInstance!!!!!!!!
+    if (!source->MoveInstance(wo_refid, npc_refid, st_inst))
+        return RaiseMngrErr("HandlePickUp: MoveInstance failed.");
+    if (instance_is_fake && pickedup_formid != source->formid)
+        logger::warn("HandlePickUp: Not the same formid as source formid. OK if NPC picked up.");
+    ApplyEvolutionInInventory(source->qFormType, npc_ref, count, pickedup_formid, instance_formid);
+    if (eat && npc_refid == player_refid)
+        RE::ActorEquipManager::GetSingleton()->EquipObject(RE::PlayerCharacter::GetSingleton(), instance_bound,
+                                                            nullptr, count);
+    else
+        CleanUpSourceData(source);
+
+    UpdateStages(npc_ref);
+
+    RemoveFromWOUpdateQueue(wo_refid);
+
+    // source->PrintData();
+}
+
+void Manager::HandleConsume(const FormID stage_formid)
+{
+    if (!stage_formid) {
+        logger::warn("HandleConsume:Formid is null.");
+        return;
+    }
+    auto source = GetSource(stage_formid);
+    if (!source) {
+        logger::warn("HandleConsume:Source not found.");
+        return;
+    }
+    if (!source->IsStage(stage_formid)) {
+        logger::trace("HandleConsume:Formid is not a registered stage.");
+        return;
+    }
+
+    logger::trace("HandleConsume");
+
+    int total_registered_count = 0;
+    std::vector<StageInstance*> instances_candidates = {};
+    for (auto& st_inst : source->data[player_refid]) {
+        if (st_inst.xtra.form_id == stage_formid) {
+            total_registered_count += st_inst.count;
+            instances_candidates.push_back(&st_inst);
+        }
+    }
+
+    if (instances_candidates.empty()) {
+        logger::warn("HandleConsume: No instances found.");
+        return;
+    }
+    if (total_registered_count == 0) {
+        logger::warn("HandleConsume: Nothing to consume.");
+        return;
+    }
+
+    // check if player has the item
+    // sometimes player does not have the item but it can still be there with count = 0.
+    const auto player_inventory = player_ref->GetInventory();
+    const auto entry =
+        player_inventory.find(GetFormByID<RE::TESBoundObject>(stage_formid));
+    const auto player_count = entry != player_inventory.end() ? entry->second.first : 0;
+    int diff = total_registered_count - player_count;
+    if (diff < 0) {
+        logger::warn("HandleConsume: Something could have gone wrong with registration.");
+        return;
+    }
+    if (diff == 0) {
+        logger::warn("HandleConsume: Nothing to remove.");
+        return;
+    }
+
+    logger::trace("HandleConsume: Adjusting registered count");
+
+    const auto curr_time = RE::Calendar::GetSingleton()->GetHoursPassed();
+    std::sort(
+        instances_candidates.begin(), instances_candidates.end(), [curr_time](StageInstance* a, StageInstance* b) {
+            return a->GetElapsed(curr_time) > b->GetElapsed(curr_time);  // eat the older stuff but at same stage
+        });
+
+    for (auto& instance : instances_candidates) {
+        if (diff <= instance->count) {
+            instance->count -= diff;
+            break;
+        } else {
+            diff -= instance->count;
+            instance->count = 0;
+        }
+    }
+
+    UpdateStages(player_ref);
+
+    if (!source->data.empty()) CleanUpSourceData(source);
+    logger::trace("HandleConsume: updated.");
+}
+
+const bool Manager::HandleBuy(const FormID bought_formid, const Count bought_count, const RefID vendor_chest_refid)
+ {
+    if (!bought_formid) {
+        logger::warn("HandleBuy: Formid is null.");
+        return false;
+    }
+    if (!bought_count) {
+        logger::warn("HandleBuy: Count is 0.");
+        return false;
+    }
+    if (!vendor_chest_refid) {
+        logger::warn("HandleBuy: Vendor chest refid is null.");
+        return false;
+    }
+
+    logger::trace("HandleBuy: Formid {} , Count {} , Vendor chest refid {}", bought_formid, bought_count,
+                    vendor_chest_refid);
+    if (IsExternalContainer(bought_formid, vendor_chest_refid))
+        return UnLinkExternalContainer(bought_formid, bought_count, vendor_chest_refid);
+    else if (!RegisterAndGo(bought_formid, bought_count, player_refid))
+        logger::error("HandleBuy: RegisterAndGo failed.");
+    return false;
+}
+
+void Manager::HandleCraftingEnter(unsigned int bench_type)
+ {
+    logger::trace("HandleCraftingEnter. bench_type: {}", bench_type);
+
+    if (handle_crafting_instances.size() > 0) {
+        logger::warn("HandleCraftingEnter: Crafting instances already exist.");
+        return;
+    }
+
+    if (!Settings::qform_bench_map.contains(bench_type)) {
+        logger::warn("HandleCraftingEnter: Bench type not found.");
+        return;
+    }
+
+    const auto& q_form_types = Settings::qform_bench_map.at(bench_type);
+
+    // trusting that the player will leave the crafting menu at some point and everything will be reverted
+    std::map<FormID, int> to_remove;
+    const auto player_inventory = player_ref->GetInventory();
+    for (auto& src : sources) {
+        if (src.data.empty()) {
+            logger::trace("HandleCraftingEnter: Source data is empty.");
+            continue;
+        }
+        if (!Vector::HasElement<std::string>(q_form_types, src.qFormType)) {
+            logger::trace("HandleCraftingEnter: qFormType mismatch: {} , {}", src.qFormType, bench_type);
+            continue;
+        }
+        // src.PrintData();
+        //  just to align reality and registries:
+        // AlignRegistries({player_refid});
+        if (!src.data.contains(player_refid)) continue;
+        for (const auto& st_inst : src.data.at(player_refid)) {
+            const auto stage_formid = st_inst.xtra.form_id;
+            if (!stage_formid) {
+                logger::error("HandleCraftingEnter: Stage formid is null!!!");
+                continue;
+            }
+            // if (stage_formid == src.formid) continue;
+            if (Inventory::IsQuestItem(stage_formid, player_ref)) continue;
+            if (stage_formid != src.formid && !st_inst.xtra.crafting_allowed) continue;
+            const Types::FormFormID temp = {src.formid, stage_formid};
+            if (!handle_crafting_instances.contains(temp)) {
+                const auto stage_bound = st_inst.GetBound();
+                if (!stage_bound) return RaiseMngrErr("HandleCraftingEnter: Stage bound is null.");
+                const auto src_bound = src.GetBoundObject();
+                const auto it = player_inventory.find(src_bound);
+                const auto count_src = it != player_inventory.end() ? it->second.first : 0;
+                handle_crafting_instances[temp] = {st_inst.count, count_src};
+            } else
+                handle_crafting_instances.at(temp).first += st_inst.count;
+            if (!faves_list.contains(stage_formid))
+                faves_list[stage_formid] =
+                    IsFavorited(stage_formid, player_refid);
+            else if (!faves_list.at(stage_formid))
+                faves_list.at(stage_formid) =
+                    IsFavorited(stage_formid, player_refid);
+            if (!equipped_list.contains(stage_formid))
+                equipped_list[stage_formid] = IsEquipped(stage_formid);
+            else if (!equipped_list.at(stage_formid))
+                equipped_list.at(stage_formid) = IsEquipped(stage_formid);
+        }
+    }
+
+    if (handle_crafting_instances.empty()) {
+        logger::warn("HandleCraftingEnter: No instances found.");
+        return;
+    }
+    for (const auto& [formids, counts] : handle_crafting_instances) {
+        if (formids.form_id1 == formids.form_id2) continue;
+        RemoveItemReverse(player_ref, nullptr, formids.form_id2, counts.first, RE::ITEM_REMOVE_REASON::kRemove);
+        AddItem(player_ref, nullptr, formids.form_id1, counts.first);
+        logger::trace("Crafting item updated in inventory.");
+    }
+    // print handle_crafting_instances
+    for (const auto& [formids, counts] : handle_crafting_instances) {
+        logger::trace("HandleCraftingEnter: Formid1: {} , Formid2: {} , Count1: {} , Count2: {}", formids.form_id1,
+                        formids.form_id2, counts.first, counts.second);
+    }
+}
+
+void Manager::HandleCraftingExit()
+ {
+    logger::trace("HandleCraftingExit");
+
+    if (handle_crafting_instances.empty()) {
+        logger::warn("HandleCraftingExit: No instances found.");
+        faves_list.clear();
+        equipped_list.clear();
+        return;
+    }
+
+    logger::trace("Crafting menu closed");
+    for (const auto& [formids, counts] : handle_crafting_instances) {
+        logger::trace("HandleCraftingExit: Formid1: {} , Formid2: {} , Count1: {} , Count2: {}", formids.form_id1,
+                        formids.form_id2, counts.first, counts.second);
+    }
+
+    // need to figure out how many items were used up in crafting and how many were left
+    const auto player_inventory = player_ref->GetInventory();
+    for (auto& [formids, counts] : handle_crafting_instances) {
+        const auto it =
+            player_inventory.find(GetFormByID<RE::TESBoundObject>(formids.form_id1));
+        const auto actual_count = it != player_inventory.end() ? it->second.first : 0;
+        if (const auto to_be_removed_added = actual_count - counts.second; to_be_removed_added > 0) {
+            RemoveItemReverse(player_ref, nullptr, formids.form_id1, to_be_removed_added,
+                                RE::ITEM_REMOVE_REASON::kRemove);
+            AddItem(player_ref, nullptr, formids.form_id2, to_be_removed_added);
+            bool __faved = faves_list[formids.form_id2];
+            if (__faved) FavoriteItem(formids.form_id2, player_refid);
+            bool __equipped = equipped_list[formids.form_id2];
+            if (__equipped) EquipItem(formids.form_id2, false);
+        }
+        const auto expected_count =
+            formids.form_id1 == formids.form_id2 ? counts.first : counts.first + counts.second;
+        if (0 >= expected_count - actual_count) continue;  // crafta kullanilan item sayisi
+        HandleConsume(formids.form_id2);
+    }
+
+    handle_crafting_instances.clear();
+    faves_list.clear();
+    equipped_list.clear();
+}
+
+const bool Manager::IsExternalContainer(const FormID stage_formid, const RefID refid)
+{
+    if (!refid) return false;
+    auto ref = RE::TESForm::LookupByID<RE::TESObjectREFR>(refid);
+    if (!ref) return false;
+    if (!ref->HasContainer()) return false;
+    const auto src = GetSource(stage_formid);
+    if (!src) return false;
+    if (!src->IsStage(stage_formid)) return false;
+    if (src->data.contains(refid)) return true;
+    return false;
+}
+
+const bool Manager::IsExternalContainer(const RE::TESObjectREFR* external_ref)
+{
+    if (!external_ref) return false;
+    if (!external_ref->HasContainer()) return false;
+    const auto external_refid = external_ref->GetFormID();
+    for (const auto& src : sources) {
+        if (src.data.contains(external_refid)) return true;
+    }
+    return false;
+}
+const bool Manager::LinkExternalContainer(const FormID some_formid, Count item_count, const RefID externalcontainer)
+ {
+    auto updated = false;
+    if (!some_formid) {
+        logger::error("Fake formid is null.");
+        return updated;
+    }
+    if (!item_count) {
+        logger::error("Item count is 0.");
+        return updated;
+    }
+
+    const auto external_ref = RE::TESForm::LookupByID<RE::TESObjectREFR>(externalcontainer);
+    if (!external_ref) {
+        logger::critical("External ref is null.");
+        return updated;
+    }
+    if (!external_ref->HasContainer() || externalcontainer == player_refid) {
+        logger::error("External container does not have a container or is player ref.");
+        return updated;
+    }
+    const auto source = GetSource(some_formid);
+    if (source) {
+        logger::trace("Linking external container.");
+        if (const auto rest_ =
+                source->MoveInstances(player_refid, externalcontainer, some_formid, item_count, true);
+            rest_ > 0) {
+            logger::warn("LinkExternalContainer: Rest count: {}", rest_);
+            if (!RegisterAndGo(some_formid, rest_, externalcontainer))
+                logger::warn("LinkExternalContainer: RegisterAndGo failed.");
+        }
+        CleanUpSourceData(source);
+    } else if (!RegisterAndGo(some_formid, item_count, externalcontainer)) {
+#ifndef NDEBUG
+        logger::warn("LinkExternalContainer: RegisterAndGo failed.");
+#endif
+    }
+
+    if (!updated && UpdateStages(player_ref)) updated = true;
+    if (!updated && UpdateStages(external_ref)) updated = true;
+
+    logger::trace("Linked external container.");
+    return updated;
+}
+
+const bool Manager::UnLinkExternalContainer(const FormID some_formid, Count count, const RefID externalcontainer)
+ {
+    // bu itemla bu containera linked olduunu varsayuyo
+    if (!some_formid) {
+        logger::error("Fake formid is null.");
+        return false;
+    }
+    if (!count) {
+        logger::error("Item count is 0.");
+        return false;
+    }
+
+    if (!externalcontainer) {
+        logger::critical("External container is null.");
+        return false;
+    }
+
+    const auto source = GetSource(some_formid);
+    if (source) {
+        logger::trace("Unlinking external container. Formid {} , Count {} , External container refid {}",
+                        some_formid, count, externalcontainer);
+        if (const auto rest_ = source->MoveInstances(externalcontainer, player_refid, some_formid, count, false);
+            rest_ > 0) {
+            logger::warn("UnLinkExternalContainer: Rest count: {}", rest_);
+            if (!RegisterAndGo(some_formid, rest_, player_refid))
+                logger::warn("UnLinkExternalContainer: RegisterAndGo failed.");
+        }
+        CleanUpSourceData(source);
+    } else if (!RegisterAndGo(some_formid, count, player_refid)) {
+        logger::warn("UnLinkExternalContainer: RegisterAndGo failed.");
+    }
+
+    logger::trace("Updating stages in player inventory and external container.");
+    auto updated = false;
+    if (!updated && UpdateStages(player_ref)) updated = true;
+    if (auto external_ref = RE::TESForm::LookupByID<RE::TESObjectREFR>(externalcontainer)) {
+        if (external_ref->HasContainer()) {
+            if (!updated && UpdateStages(external_ref)) updated = true;
+        }
+    }
+    logger::trace("Unlinked external container.");
+
+    return updated;
+};
+
 bool Manager::UpdateStages(RE::TESObjectREFR* ref, const float _time)
 {
     if (getUpdateIsBusy()) {
@@ -971,6 +1625,34 @@ bool Manager::UpdateStages(RefID loc_refid)
         return false;
     }
     return UpdateStages(loc_ref);
+}
+
+void Manager::SwapWithStage(RE::TESObjectREFR* wo_ref)
+{
+    // registered olduunu varsayiyoruz
+    logger::trace("SwapWithStage");
+    if (!wo_ref) return RaiseMngrErr("Ref is null.");
+    const auto st_inst = GetWOStageInstance(wo_ref);
+    if (!st_inst) {
+        logger::warn("SwapWithStage: Source not found.");
+        return;
+    }
+    // remove the extra data that cause issues when dropping
+    //xData::PrintObjectExtraData(wo_ref);
+    for (const auto& i : Settings::xRemove) wo_ref->extraList.RemoveByType(static_cast<RE::ExtraDataType>(i));
+    WorldObject::SwapObjects(wo_ref, st_inst->GetBound(), false);
+}
+
+void Manager::HandleFormDelete(const FormID a_refid)
+{
+    for (auto& src : sources) {
+        if (src.data.contains(a_refid)) {
+            logger::warn("HandleFormDelete: Formid {}", a_refid);
+            for (auto& st_inst : src.data[a_refid]) {
+                st_inst.count = 0;
+            }
+        }
+    }
 }
 
 void Manager::_HandleLoc(RE::TESObjectREFR* loc_ref)

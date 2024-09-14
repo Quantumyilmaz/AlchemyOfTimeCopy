@@ -96,7 +96,7 @@ void StageInstance::RemoveTransform(const float curr_time)
     _delay_formid = 0;
 }
 
-inline void StageInstance::RemoveTimeMod(const float time)
+void StageInstance::RemoveTimeMod(const float time)
 {
     RemoveTransform(time);
     SetDelay(time, 1, 0);

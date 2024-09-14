@@ -136,6 +136,33 @@ public:
         // Settings::UninstallOtherSettings();
     }
 
+    void setListenCrosshair(const bool value) {
+        std::lock_guard<std::mutex> lock(mutex);
+        listen_crosshair = value;
+    }
+
+    [[nodiscard]] const bool getListenEquip() {
+        std::lock_guard<std::mutex> lock(mutex);
+        return listen_equip;
+    }
+
+    [[nodiscard]] const bool getListenContainerChange() {
+        std::lock_guard<std::mutex> lock(mutex);
+        return listen_container_change;
+    }
+
+    [[nodiscard]] const bool getListenCrosshair() {
+        std::lock_guard<std::mutex> lock(mutex);
+        return listen_crosshair;
+    }
+
+    [[nodiscard]] const bool getPO3UoTInstalled() {
+        std::lock_guard<std::mutex> lock(mutex);
+        return po3_use_or_take;
+    }
+
+    void ClearWOUpdateQueue() { _ref_stops_.clear(); }
+
     // use it only for world objects! checks if there is a stage instance for the given refid
     [[nodiscard]] const bool RefIsRegistered(const RefID refid);
 
@@ -145,9 +172,39 @@ public:
     // giris noktasi RegisterAndGo uzerinden
     [[nodiscard]] const bool RegisterAndGo(RE::TESObjectREFR* wo_ref);
 
+	bool HandleDropCheck(RE::TESObjectREFR* ref);
+
+	void HandleDrop(const FormID dropped_formid, Count count, RE::TESObjectREFR* dropped_stage_ref);
+
+    void HandlePickUp(const FormID pickedup_formid, const Count count, const RefID wo_refid, const bool eat,
+		RE::TESObjectREFR* npc_ref = nullptr);
+
+	void HandleConsume(const FormID stage_formid);
+
+    [[nodiscard]] const bool HandleBuy(const FormID bought_formid, const Count bought_count,
+		const RefID vendor_chest_refid);
+
+	void HandleCraftingEnter(unsigned int bench_type);
+
+	void HandleCraftingExit();
+
+	[[nodiscard]] const bool IsExternalContainer(const FormID stage_formid, const RefID refid);
+
+    [[nodiscard]] const bool IsExternalContainer(const RE::TESObjectREFR* external_ref);
+
+    [[nodiscard]] const bool LinkExternalContainer(const FormID some_formid, Count item_count,
+                                                   const RefID externalcontainer);
+
+    [[nodiscard]] const bool UnLinkExternalContainer(const FormID some_formid, Count count,
+		const RefID externalcontainer);
+
     bool UpdateStages(RE::TESObjectREFR* ref, const float _time = 0);
 
     bool UpdateStages(RefID loc_refid);
+
+	void SwapWithStage(RE::TESObjectREFR* wo_ref);
+
+	void HandleFormDelete(const FormID a_refid);
 
     // for syncing the previous session's data with the current session
     void _HandleLoc(RE::TESObjectREFR* loc_ref);

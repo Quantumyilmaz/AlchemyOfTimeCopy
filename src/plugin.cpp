@@ -1,11 +1,57 @@
-#include "Manager.h"
+#include "Events.h"
+
+Manager* M = nullptr;
+bool eventsinks_added = false;
 
 void OnMessage(SKSE::MessagingInterface::Message* message) {
     if (message->type == SKSE::MessagingInterface::kDataLoaded) {
+        logger::info("Data loaded.");
         // Start
+        if (!IsPo3Installed()) {
+            logger::error("Po3 is not installed.");
+            MsgBoxesNotifs::Windows::Po3ErrMsg();
+            return;
+        }
+        auto DFT = DynamicFormTracker::GetSingleton();
+        LoadSettings();
+        auto sources = std::vector<Source>();
+        M = Manager::GetSingleton(sources);
     }
-    if (message->type == SKSE::MessagingInterface::kNewGame || message->type == SKSE::MessagingInterface::kPostLoadGame) {
+    if (message->type == SKSE::MessagingInterface::kNewGame || message->type ==
+        SKSE::MessagingInterface::kPostLoadGame) {
+        if (eventsinks_added) return;
+        logger::info("New or Post-load game.");
+        if (Settings::failed_to_load) {
+            MsgBoxesNotifs::InGame::CustomMsg("Failed to load settings. Check log for details.");
+            M->Uninstall();
+			return;
+        }
         // Post-load
+        if (!M) return;
+        // EventSink
+        bool wo_e = Settings::INI_settings["Other Settings"]["WorldObjectsEvolve"];
+        auto* eventSink = OurEventSink::GetSingleton(wo_e,M);
+        auto* eventSourceHolder = RE::ScriptEventSourceHolder::GetSingleton();
+        eventSourceHolder->AddEventSink<RE::TESEquipEvent>(eventSink);
+        eventSourceHolder->AddEventSink<RE::TESActivateEvent>(eventSink);
+        eventSourceHolder->AddEventSink<RE::TESContainerChangedEvent>(eventSink);
+        eventSourceHolder->AddEventSink<RE::TESFurnitureEvent>(eventSink);
+        RE::UI::GetSingleton()->AddEventSink<RE::MenuOpenCloseEvent>(eventSink);
+        eventSourceHolder->AddEventSink<RE::TESSleepStopEvent>(eventSink);
+        eventSourceHolder->AddEventSink<RE::TESWaitStopEvent>(eventSink);
+        eventSourceHolder->AddEventSink<RE::TESFormDeleteEvent>(eventSink);
+        SKSE::GetCrosshairRefEventSource()->AddEventSink(eventSink);
+        RE::PlayerCharacter::GetSingleton()->AsBGSActorCellEventSource()->AddEventSink(eventSink);
+        eventsinks_added = true;
+        logger::info("Event sinks added.");
+        
+        if (message->type != SKSE::MessagingInterface::kNewGame) {
+            eventSink->HandleWOsInCell();
+        }
+        
+        // MCP
+        //UI::Register(M);
+        //logger::info("MCP registered.");
     }
 }
 

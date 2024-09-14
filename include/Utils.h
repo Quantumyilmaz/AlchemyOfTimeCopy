@@ -122,6 +122,12 @@ namespace Types {
 };
 
 namespace Vector {
+    static inline std::vector<std::string> SetToVector(const std::set<std::string>& input_set){
+        // Construct a vector using the range constructor
+        std::vector<std::string> result(input_set.begin(), input_set.end());
+        return result;
+    };
+
     template <typename T>
     inline bool HasElement(const std::vector<T>& vec, const T& element) { return std::find(vec.begin(), vec.end(), element) != vec.end(); };
 };
@@ -286,13 +292,36 @@ namespace xData {
 
 namespace WorldObject {
 
+	const int16_t GetObjectCount(RE::TESObjectREFR* ref);
     void SetObjectCount(RE::TESObjectREFR* ref, Count count);
 
     RE::TESObjectREFR* DropObjectIntoTheWorld(RE::TESBoundObject* obj, Count count, bool owned = true);
 
     void SwapObjects(RE::TESObjectREFR* a_from, RE::TESBoundObject* a_to, const bool apply_havok=true);
 
+	float GetDistanceFromPlayer(RE::TESObjectREFR* ref);
     [[nodiscard]] const bool PlayerPickUpObject(RE::TESObjectREFR* item, Count count, const unsigned int max_try = 3);
+
+    const RefID TryToGetRefIDFromHandle(RE::ObjectRefHandle handle);
+
+	RE::TESObjectREFR* TryToGetRefFromHandle(RE::ObjectRefHandle& handle, unsigned int max_try = 2);
+
+	RE::TESObjectREFR* TryToGetRefInCell(const FormID baseid, const Count count, float radius = 180);
+
+    template <typename T>
+    void ForEachRefInCell(T func) {
+        const auto player_cell = RE::PlayerCharacter::GetSingleton()->GetParentCell();
+        if (!player_cell) {
+			logger::error("Player cell is null.");
+			return;
+		}
+        auto& runtimeData = player_cell->GetRuntimeData();
+        RE::BSSpinLockGuard locker(runtimeData.spinLock);
+        for (auto& ref : runtimeData.references) {
+			if (!ref) continue;
+			func(ref.get());
+		}
+    }
 };
 
 namespace Inventory {
@@ -302,8 +331,83 @@ namespace Inventory {
     const bool HasItemEntry(RE::TESBoundObject* item, RE::TESObjectREFR* inventory_owner, bool nonzero_entry_check=false);
 
     inline const std::int32_t GetItemCount(RE::TESBoundObject* item, RE::TESObjectREFR* inventory_owner);
+
+    bool IsQuestItem(const FormID formid, RE::TESObjectREFR* inv_owner);
 };
 
+namespace Menu {
+
+    RE::TESObjectREFR* GetContainerFromMenu();
+
+    RE::TESObjectREFR* GetVendorChestFromMenu();
+
+    template <typename T>
+    void RefreshItemList(RE::TESObjectREFR* inventory_owner) {
+        if (!inventory_owner) {
+            logger::error("Inventory owner is null.");
+            return;
+        }
+        if (T::MENU_NAME != RE::BarterMenu::MENU_NAME && T::MENU_NAME != RE::ContainerMenu::MENU_NAME &&
+            T::MENU_NAME != RE::InventoryMenu::MENU_NAME) {
+            logger::error("Menu type not supported: {}", T::MENU_NAME);
+			return;
+		}
+        auto ui = RE::UI::GetSingleton();
+        /*if (!ui->IsMenuOpen(T::MENU_NAME)){
+            logger::error("Menu is not open.");
+			return;
+        }*/
+                
+        std::map<FormID, Count> item_map;
+        auto inventory = inventory_owner->GetInventory();
+        for (auto& [item, entry] : inventory) {
+			item_map[item->GetFormID()] = entry.first;
+		}
+        auto inventory_menu = ui->GetMenu<T>();
+        if (inventory_menu) {
+            if (auto itemlist = inventory_menu->GetRuntimeData().itemList) {
+                logger::trace("Updating itemlist.");
+                for (auto* item : itemlist->items) {
+                    auto temp_entry = item->data.objDesc;
+                    if (!temp_entry) {
+                        logger::error("Item entry is null.");
+                        continue;
+                    }
+                    auto temp_obj = temp_entry->object;
+                    if (!temp_obj) {
+						logger::error("Item object is null.");
+						continue;
+					}
+                    item_map[temp_obj->GetFormID()] -= item->data.GetCount();
+                }
+            } else logger::info("Itemlist is null.");
+        } else logger::info("Inventory menu is null.");
+
+        for (auto& [formid, count] : item_map) {
+			if (count > 0) {
+				auto item = GetFormByID<RE::TESBoundObject>(formid);
+				if (!item) {
+					logger::error("Item is null.");
+					continue;
+				}
+                logger::trace("Sending inventory update message: {}", item->GetName());
+				RE::SendUIMessage::SendInventoryUpdateMessage(inventory_owner, item);
+			}
+		}
+    };
+
+    template <typename T>
+    void UpdateItemList() {
+        if (auto ui = RE::UI::GetSingleton(); ui->IsMenuOpen(T::MENU_NAME)) {
+            if (auto inventory_menu = ui->GetMenu<T>()) {
+                if (auto itemlist = inventory_menu->GetRuntimeData().itemList) {
+                    logger::trace("Updating itemlist.");
+                    itemlist->Update();
+                } else logger::info("Itemlist is null.");
+            } else logger::info("Inventory menu is null.");
+        } else logger::info("Inventory menu is not open.");
+    }
+};
 namespace DynamicForm {
 
     void copyBookAppearence(RE::TESForm* source, RE::TESForm* target);

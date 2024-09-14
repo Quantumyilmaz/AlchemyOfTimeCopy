@@ -267,6 +267,19 @@ const bool IsEquipped(RE::TESBoundObject* item)
     return false;
 }
 
+const int16_t WorldObject::GetObjectCount(RE::TESObjectREFR* ref)
+{
+    if (!ref) {
+        logger::error("Ref is null.");
+        return 0;
+    }
+    if (ref->extraList.HasType(RE::ExtraDataType::kCount)) {
+        RE::ExtraCount* xCount = ref->extraList.GetByType<RE::ExtraCount>();
+        return xCount->count;
+    }
+    return 0;
+}
+
 void WorldObject::SetObjectCount(RE::TESObjectREFR* ref, Count count)
 {
     if (!ref) {
@@ -372,6 +385,17 @@ void WorldObject::SwapObjects(RE::TESObjectREFR* a_from, RE::TESBoundObject* a_t
     //});
 }
 
+float WorldObject::GetDistanceFromPlayer(RE::TESObjectREFR* ref)
+{
+    if (!ref) {
+		logger::error("Ref is null.");
+		return 0;
+	}
+	auto player_pos = RE::PlayerCharacter::GetSingleton()->GetPosition();
+	auto ref_pos = ref->GetPosition();
+	return player_pos.GetDistance(ref_pos);
+}
+
 const bool WorldObject::PlayerPickUpObject(RE::TESObjectREFR* item, Count count, const unsigned int max_try)
 {
     logger::trace("PickUpItem");
@@ -403,6 +427,80 @@ const bool WorldObject::PlayerPickUpObject(RE::TESObjectREFR* item, Count count,
     }
 
     return false;
+}
+
+const RefID WorldObject::TryToGetRefIDFromHandle(RE::ObjectRefHandle handle)
+{
+    if (handle.get() && handle.get()->GetFormID()) return handle.get()->GetFormID();
+    if (handle.native_handle()
+        //&& RE::TESObjectREFR::LookupByID<RE::TESObjectREFR>(handle.native_handle())
+    ) return handle.native_handle();
+    return 0;
+}
+
+RE::TESObjectREFR* WorldObject::TryToGetRefFromHandle(RE::ObjectRefHandle& handle, unsigned int max_try)
+ {
+    RE::TESObjectREFR* ref = nullptr;
+    if (auto handle_ref = RE::TESObjectREFR::LookupByHandle(handle.native_handle())) {
+        logger::trace("Handle ref found");
+        ref = handle_ref.get();
+        return ref;
+        /*if (!ref->IsDisabled() && !ref->IsMarkedForDeletion() && !ref->IsDeleted()) {
+            return ref;
+        }*/
+    }
+    if (handle.get()) {
+        ref = handle.get().get();
+        return ref;
+        /*if (!ref->IsDisabled() && !ref->IsMarkedForDeletion() && !ref->IsDeleted()) {
+            return ref;
+        }*/
+    }
+    if (auto ref_ = RE::TESForm::LookupByID<RE::TESObjectREFR>(handle.native_handle())) {
+        return ref_;
+        /*if (!ref_->IsDisabled() && !ref_->IsMarkedForDeletion() && !ref_->IsDeleted()) {
+            return ref_;
+        }*/
+    }
+    if (max_try && handle) return TryToGetRefFromHandle(handle, --max_try);
+    return nullptr;
+}
+
+RE::TESObjectREFR* WorldObject::TryToGetRefInCell(const FormID baseid, const Count count, float radius)
+ {
+    const auto player = RE::PlayerCharacter::GetSingleton();
+    const auto player_cell = player->GetParentCell();
+    if (!player_cell) {
+		logger::error("Player cell is null.");
+		return nullptr;
+	}
+    const auto player_pos = player->GetPosition();
+    auto& runtimeData = player_cell->GetRuntimeData();
+    RE::BSSpinLockGuard locker(runtimeData.spinLock);
+    for (const auto& ref : runtimeData.references) {
+        if (!ref) continue;
+        /*if (ref->IsDisabled()) continue;
+        if (ref->IsMarkedForDeletion()) continue;
+        if (ref->IsDeleted()) continue;*/
+        const auto ref_base = ref->GetBaseObject();
+        if (!ref_base) continue;
+        const auto ref_baseid = ref_base->GetFormID();
+        const auto ref_id = ref->GetFormID();
+        const auto ref_pos = ref->GetPosition();
+        if (ref_baseid == baseid && ref->extraList.GetCount() == count) {
+            // get radius and check if ref is in radius
+            if (ref_id < 4278190080) {
+                logger::trace("Ref is a placed reference. Continuing search.");
+                continue;
+            }
+            logger::trace("Ref found in cell: {} with id {}", ref_base->GetName(), ref_id);
+            if (radius) {
+                if (player_pos.GetDistance(ref_pos) < radius) return ref.get();
+                else logger::trace("Ref is not in radius");
+            } else return ref.get();
+        }
+    }
+    return nullptr;
 }
 
 std::string String::toLowercase(const std::string& str)
@@ -825,6 +923,19 @@ const std::int32_t Inventory::GetItemCount(RE::TESBoundObject* item, RE::TESObje
     return 0;
 }
 
+bool Inventory::IsQuestItem(const FormID formid, RE::TESObjectREFR* inv_owner)
+{
+    const auto inventory = inv_owner->GetInventory();
+    const auto item = GetFormByID<RE::TESBoundObject>(formid);
+    if (item) {
+        const auto it = inventory.find(item);
+        if (it != inventory.end()) {
+            if (it->second.second->IsQuestObject()) return true;
+        }
+    }
+    return false;
+}
+
 void DynamicForm::copyBookAppearence(RE::TESForm* source, RE::TESForm* target)
 {
     auto* sourceBook = source->As<RE::TESObjectBOOK>();
@@ -1035,3 +1146,57 @@ void xData::Copy::CopyOwnership(RE::ExtraOwnership* from, RE::ExtraOwnership* to
     logger::trace("CopyOwnership");
 	to->owner = from->owner;
 }
+
+RE::TESObjectREFR* Menu::GetContainerFromMenu()
+{   
+	auto ui = RE::UI::GetSingleton()->GetMenu<RE::ContainerMenu>();
+	if (!ui) {
+		logger::warn("GetContainerFromMenu: Container menu is null");
+		return nullptr;
+	}
+	auto ui_refid = ui->GetTargetRefHandle();
+	if (!ui_refid) {
+		logger::warn("GetContainerFromMenu: Container menu reference id is null");
+		return nullptr;
+	}
+    logger::trace("UI Reference id {}", ui_refid);
+    if (auto ui_ref = RE::TESObjectREFR::LookupByHandle(ui_refid)) {
+        logger::trace("UI Reference name {}", ui_ref->GetDisplayFullName());
+        return ui_ref.get();
+    }
+    return nullptr;
+}
+
+RE::TESObjectREFR* Menu::GetVendorChestFromMenu()
+{
+
+	auto ui = RE::UI::GetSingleton()->GetMenu<RE::BarterMenu>();
+	if (!ui) {
+		logger::warn("GetVendorChestFromMenu: Barter menu is null");
+		return nullptr;
+	}
+	auto ui_refid = ui->GetTargetRefHandle();
+	if (!ui_refid) {
+		logger::warn("GetVendorChestFromMenu: Barter menu reference id is null");
+		return nullptr;
+	}
+	auto ui_ref = RE::TESObjectREFR::LookupByHandle(ui_refid);
+	if (!ui_ref) {
+		logger::warn("GetVendorChestFromMenu: Barter menu reference is null");
+		return nullptr;
+	}
+	auto barter_npc = ui_ref->GetBaseObject()->As<RE::TESNPC>();
+	if (!barter_npc) {
+		logger::warn("GetVendorChestFromMenu: Barter menu reference is not an NPC");
+		return nullptr;
+	}
+	for (auto& faction_rank : barter_npc->factions) {
+        if (auto merchant_chest = faction_rank.faction->vendorData.merchantContainer) {
+            logger::trace("Found chest with refid {}", merchant_chest->GetFormID());
+            return merchant_chest;
+        }
+    };
+
+    return nullptr;
+}
+
