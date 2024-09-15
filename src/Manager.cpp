@@ -1744,6 +1744,11 @@ void Manager::_HandleLoc(RE::TESObjectREFR* loc_ref)
     logger::trace("HandleLoc: synced with loc {}.", loc_refid);
 }
 
+const std::vector<Source>& Manager::GetSources() const
+{
+    return sources;
+};
+
 void Manager::Print()
 {
     logger::info("Printing sources...Current time: {}", RE::Calendar::GetSingleton()->GetHoursPassed());

@@ -209,6 +209,8 @@ public:
     // for syncing the previous session's data with the current session
     void _HandleLoc(RE::TESObjectREFR* loc_ref);
 
+    const std::vector<Source>& GetSources() const;
+
     void Print();
 
 };

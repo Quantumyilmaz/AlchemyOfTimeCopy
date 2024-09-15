@@ -208,14 +208,14 @@ const Stage& Source::GetStage(const StageNo no)
     }
 }
 
-inline const Duration Source::GetStageDuration(const StageNo no) const
+const Duration Source::GetStageDuration(const StageNo no) const
 {
     if (!IsStageNo(no)) return 0;
     else if (stages.contains(no)) return stages.at(no).duration;
     else return 0;
 }
 
-inline const std::string Source::GetStageName(const StageNo no) const
+const std::string Source::GetStageName(const StageNo no) const
 {
     if (!IsStageNo(no)) return "";
 	else if (stages.contains(no)) return stages.at(no).name;

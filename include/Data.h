@@ -39,9 +39,9 @@ struct Source {
 
     const Stage& GetStage(const StageNo no);
 
-    inline const Duration GetStageDuration(const StageNo no) const;
+    const Duration GetStageDuration(const StageNo no) const;
 
-    inline const std::string GetStageName(const StageNo no) const;
+    const std::string GetStageName(const StageNo no) const;
 
     [[nodiscard]] const bool InsertNewInstance(StageInstance& stage_instance, const RefID loc);
 

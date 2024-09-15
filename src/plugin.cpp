@@ -1,4 +1,4 @@
-#include "Events.h"
+#include "MCP.h"
 
 Manager* M = nullptr;
 OurEventSink* eventSink = nullptr;
@@ -43,7 +43,7 @@ void OnMessage(SKSE::MessagingInterface::Message* message) {
         logger::info("Event sinks added.");
         
         // 5) Start MCP
-        //UI::Register(M);
+        UI::Register(M);
         logger::info("MCP registered.");
     }
     if (message->type == SKSE::MessagingInterface::kPostLoadGame) {
@@ -55,7 +55,10 @@ void OnMessage(SKSE::MessagingInterface::Message* message) {
 SKSEPluginLoad(const SKSE::LoadInterface *skse) {
 
     SetupLog();
+    SetupLog();
     logger::info("Plugin loaded");
     SKSE::Init(skse);
+    //InitializeSerialization();
+    SKSE::GetMessagingInterface()->RegisterListener(OnMessage);
     return true;
 }

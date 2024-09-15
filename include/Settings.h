@@ -85,3 +85,11 @@ DefaultSettings parseDefaults(std::string _type);
 CustomSettings parseCustoms(std::string _type);
 void LoadINISettings();
 void LoadSettings();
+
+
+namespace LogSettings {
+    inline bool log_trace = true;
+    inline bool log_info = true;
+    inline bool log_warning = true;
+    inline bool log_error = true;
+};
