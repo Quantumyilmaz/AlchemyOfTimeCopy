@@ -32,22 +32,24 @@ void Manager::_WOUpdateLoop(const float curr_time)
 }
 
 void Manager::UpdateLoop()
-{
-    if (!getListenWOUpdate()) return;
-    setListenWOUpdate(false);
+{   
+    if (!listen_woupdate.load()) return;
+	listen_woupdate.store(false);
     if (_ref_stops_.empty()) {
         Stop();
-        return setListenWOUpdate(true);
+        listen_woupdate.store(true);
+        return;
     }
     logger::trace("UpdateLoop");
-    if (auto ui = RE::UI::GetSingleton(); ui && ui->GameIsPaused()) return setListenWOUpdate(true);
+    if (auto ui = RE::UI::GetSingleton(); ui && ui->GameIsPaused()) return listen_woupdate.store(true);
     if (auto cal = RE::Calendar::GetSingleton()) {
         const auto curr_time = cal->GetHoursPassed();
         logger::trace("_WOUpdateLoop");
         _WOUpdateLoop(curr_time);
     }
     logger::trace("UpdateLoop done.");
-    setListenWOUpdate(true);
+    
+    listen_woupdate.store(true);
     Start();
 }
 
@@ -92,9 +94,9 @@ Source* Manager::_MakeSource(const FormID source_formid, DefaultSettings* settin
 void Manager::CleanUpSourceData(Source* src)
 {
     if (!src) return;
-    setListenWOUpdate(false);
+    listen_woupdate.store(false);
     src->CleanUpData();
-    setListenWOUpdate(true);
+    listen_woupdate.store(true);
 }
 
 Source* Manager::GetSource(const FormID some_formid)
@@ -289,12 +291,12 @@ inline void Manager::_ApplyEvolutionInInventoryX(RE::TESObjectREFR* inventory_ow
     } else
         logger::info("original ExtraDataList is null.");
 
-    setListenContainerChange(false);
+    listen_container_change.store(false);
     if (!WorldObject::PlayerPickUpObject(ref_handle, __count)) {
         logger::error("Item not picked up.");
         return;
     }
-    setListenContainerChange(true);
+    listen_container_change.store(true);
 
     RemoveItemReverse(inventory_owner, nullptr, old_item, __count, RE::ITEM_REMOVE_REASON::kRemove);
     logger::trace("Stage updated in inventory.");
@@ -372,9 +374,9 @@ void Manager::ApplyEvolutionInInventory(std::string _qformtype_, RE::TESObjectRE
     if (is_faved) FavoriteItem(RE::TESForm::LookupByID<RE::TESBoundObject>(new_item),
                                                             inventory_owner);
     if (is_equipped) {
-        setListenEquip(false);
+		listen_equip.store(false);
         EquipItem(RE::TESForm::LookupByID<RE::TESBoundObject>(new_item));
-        setListenEquip(true);
+        listen_equip.store(true);
     }
 }
 
@@ -384,48 +386,46 @@ inline const RE::ObjectRefHandle Manager::RemoveItemReverse(RE::TESObjectREFR* m
 
     auto ref_handle = RE::ObjectRefHandle();
 
+	if (!moveFrom) {
+		logger::warn("RemoveItemReverse: moveFrom is null.");
+		return ref_handle;
+	}
+
     if (count <= 0) {
         logger::warn("Count is 0 or less.");
         return ref_handle;
     }
 
-    if (!moveFrom && !moveTo) {
-        RaiseMngrErr("moveFrom and moveTo are both null!");
-        return ref_handle;
-    }
-    if (moveFrom && moveTo && moveFrom->GetFormID() == moveTo->GetFormID()) {
-        logger::info("moveFrom and moveTo are the same!");
+    if (moveTo && moveFrom->GetFormID() == moveTo->GetFormID()) {
+        logger::warn("moveFrom and moveTo are the same!");
         return ref_handle;
     }
 
     logger::trace("RemoveItemReverse {} from {}", item_id, moveFrom->GetFormID());
-    setListenContainerChange(false);
+    listen_container_change.store(false);
 
     auto inventory = moveFrom->GetInventory();
     for (auto item = inventory.rbegin(); item != inventory.rend(); ++item) {
-        auto item_obj = item->first;
-        if (!item_obj) RaiseMngrErr("Item object is null");
-        if (item_obj->GetFormID() == item_id) {
+        if (auto item_obj = item->first; item_obj && item_obj->GetFormID() == item_id) {
             auto inv_data = item->second.second.get();
             if (inv_data->IsQuestObject()) {
                 logger::warn("Item is a quest object.");
                 return ref_handle;
             }
-            if (!inv_data) RaiseMngrErr("Item data is null");
-            auto asd = inv_data->extraLists;
+			auto* asd = inv_data ? inv_data->extraLists : nullptr;
             if (!asd || asd->empty()) {
                 logger::trace("Removing item reverse without extra data.");
                 ref_handle = moveFrom->RemoveItem(item_obj, count, reason, nullptr, moveTo);
-            } else {
+            }
+            else {
                 logger::trace("Removing item reverse with extra data.");
                 ref_handle = moveFrom->RemoveItem(item_obj, count, reason, asd->front(), moveTo);
             }
-            // Menu::SendInventoryUpdateMessage(moveFrom, item_obj);
             break;
         }
     }
 
-    setListenContainerChange(true);
+    listen_container_change.store(true);
     return ref_handle;
 }
 
@@ -456,11 +456,11 @@ void Manager::AddItem(RE::TESObjectREFR* addTo, RE::TESObjectREFR* addFrom, Form
         return;
     }
     logger::trace("setting listen container change to false.");
-    setListenContainerChange(false);
+    listen_container_change.store(false);
     logger::trace("Adding item to container.");
     addTo->AddObjectToContainer(bound, nullptr, count, addFrom);
     logger::trace("Item added to container.");
-    setListenContainerChange(true);
+    listen_container_change.store(true);
     logger::trace("listen container change set to true.");
     SKSE::GetTaskInterface()->AddTask([addTo, bound]() {
         logger::trace("Refreshing inventory for newly added item.");
@@ -726,43 +726,6 @@ void Manager::Init()
     logger::info("Manager initialized with instance limit {}", _instance_limit);
 
     // add safety check for the sources size say 5 million
-}
-
-void Manager::setListenEquip(const bool value)
-{
-    std::lock_guard<std::mutex> lock(mutex);  // Lock the mutex
-    listen_equip = value;
-}
-
-void Manager::setListenWOUpdate(const bool value)
-{
-    std::lock_guard<std::mutex> lock(mutex);  // Lock the mutex
-    listen_woupdate = value;
-}
-
-void Manager::setListenContainerChange(const bool value)
-{
-    std::lock_guard<std::mutex> lock(mutex);  // Lock the mutex
-    listen_container_change = value;
-}
-
-const bool Manager::getListenWOUpdate()
-{
-    std::lock_guard<std::mutex> lock(mutex);  // Lock the mutex
-    return listen_woupdate;
-}
-
-void Manager::setUpdateIsBusy(const bool)
-{
-    return;
-    // std::lock_guard<std::mutex> lock(mutex);  // Lock the mutex
-    // update_is_busy = value;
-}
-
-const bool Manager::getUpdateIsBusy()
-{
-    std::lock_guard<std::mutex> lock(mutex);  // Lock the mutex
-    return update_is_busy;
 }
 
 const bool Manager::RefIsRegistered(const RefID refid)
@@ -1543,22 +1506,22 @@ const bool Manager::UnLinkExternalContainer(const FormID some_formid, Count coun
 
 bool Manager::UpdateStages(RE::TESObjectREFR* ref, const float _time)
 {
-    if (getUpdateIsBusy()) {
+    if (update_is_busy.load()) {
         logger::critical("UpdateStages: Update is busy.");
         return false;
     }
-    setUpdateIsBusy(true);
+    update_is_busy.store(true);
     // std::lock_guard<std::mutex> lock(mutex);
     //  assumes that the ref is registered
     logger::trace("Manager: Updating stages.");
     if (!ref) {
         logger::critical("UpdateStages: ref is null.");
-        setUpdateIsBusy(false);
+        update_is_busy.store(false);
         return false;
     }
     if (sources.empty()) {
         logger::trace("UpdateStages: Sources is empty.");
-        setUpdateIsBusy(false);
+        update_is_busy.store(false);
         return false;
     }
 
@@ -1575,7 +1538,7 @@ bool Manager::UpdateStages(RE::TESObjectREFR* ref, const float _time)
         const bool temp_update_took_place = _UpdateTimeModulators(ref, curr_time);
         if (!update_took_place) update_took_place = temp_update_took_place;
     } else if (!worldobjectsevolve) {
-        setUpdateIsBusy(false);
+        update_is_busy.store(false);
         return false;
     }
 
@@ -1604,7 +1567,7 @@ bool Manager::UpdateStages(RE::TESObjectREFR* ref, const float _time)
     Print();
 #endif  // !NDEBUG
 
-    setUpdateIsBusy(false);
+    update_is_busy.store(false);
 
     return update_took_place;
 }
@@ -1944,9 +1907,9 @@ void Manager::ReceiveData()
     }
 
     logger::trace("Deleting unused fake forms from bank.");
-    setListenContainerChange(false);
+    listen_container_change.store(false);
     DFT->DeleteInactives();
-    setListenContainerChange(true);
+    listen_container_change.store(true);
     if (DFT->GetNDeleted() > 0) {
         logger::warn("ReceiveData: Deleted forms exist. User is required to restart.");
         MsgBoxesNotifs::InGame::CustomMsg(

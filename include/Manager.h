@@ -28,8 +28,8 @@ class Manager : public Ticker, public SaveLoadData {
     unsigned int _instance_limit = 200000;
 
     std::map<RefID, float> _ref_stops_;
-    bool listen_woupdate = true;
-    bool update_is_busy = false;
+    std::atomic<bool> listen_woupdate = true;
+    std::atomic<bool> update_is_busy = false;
 
     std::vector<std::tuple<FormID, Count, RefID, Duration>> to_register_go;
 
@@ -93,18 +93,6 @@ class Manager : public Ticker, public SaveLoadData {
     void InitFailed();
 
     void Init();
-
-    void setListenEquip(const bool value);
-
-    void setListenWOUpdate(const bool value);
-
-    void setListenContainerChange(const bool value);
-
-    [[nodiscard]] const bool getListenWOUpdate();
-
-    void setUpdateIsBusy(const bool);
-
-    [[nodiscard]] const bool getUpdateIsBusy();
 
 public:
     Manager(std::vector<Source>& data, std::chrono::milliseconds interval)

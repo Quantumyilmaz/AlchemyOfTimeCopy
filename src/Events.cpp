@@ -2,12 +2,8 @@
 
 void OurEventSink::RefreshMenu(const RE::BSFixedString& menuName, RE::TESObjectREFR* inventory)
 {
-	setListenMenu(false);
-    /*if (ui && !ui->IsMenuOpen(menuname)) {
-        logger::trace("Menu is not open.");
-        setListenMenu(true);
-        return;
-    }*/
+	listen_menu.store(false);
+
     logger::trace("Refreshing menu: {}", menuName.c_str());
     const auto menuname = menuName.c_str();
     if (!inventory) inventory = RE::PlayerCharacter::GetSingleton();
@@ -28,8 +24,7 @@ void OurEventSink::RefreshMenu(const RE::BSFixedString& menuName, RE::TESObjectR
         Menu::RefreshItemList<RE::BarterMenu>(inventory);
         Menu::UpdateItemList<RE::BarterMenu>();
 	}
-        
-    setListenMenu(true);
+	listen_menu.store(true);
 }
 
 void OurEventSink::HandleWO(RE::TESObjectREFR* ref) const
@@ -172,7 +167,7 @@ RE::BSEventNotifyControl OurEventSink::ProcessEvent(const RE::MenuOpenCloseEvent
     if (block_eventsinks.load()) return RE::BSEventNotifyControl::kContinue;
     if (!event) return RE::BSEventNotifyControl::kContinue;
     if (!event->opening) return RE::BSEventNotifyControl::kContinue;
-    if (!getListenMenu()) return RE::BSEventNotifyControl::kContinue;
+    if (!listen_menu.load()) return RE::BSEventNotifyControl::kContinue;
 
     if (!ui->IsMenuOpen(RE::FavoritesMenu::MENU_NAME) &&
         !ui->IsMenuOpen(RE::InventoryMenu::MENU_NAME) &&
@@ -473,7 +468,7 @@ RE::BSEventNotifyControl OurEventSink::ProcessEvent(const RE::TESWaitStopEvent*,
 
 RE::BSEventNotifyControl OurEventSink::ProcessEvent(const RE::BGSActorCellEvent* a_event, RE::BSTEventSource<RE::BGSActorCellEvent>*)
 {
-    if (!getListenCellChange()) return RE::BSEventNotifyControl::kContinue;
+    if (!listen_cellchange.load()) return RE::BSEventNotifyControl::kContinue;
     if (!a_event) return RE::BSEventNotifyControl::kContinue;
     auto eventActorHandle = a_event->actor;
     auto eventActorPtr = eventActorHandle ? eventActorHandle.get() : nullptr;
@@ -489,10 +484,10 @@ RE::BSEventNotifyControl OurEventSink::ProcessEvent(const RE::BGSActorCellEvent*
 
     if (a_event->flags.any(RE::BGSActorCellEvent::CellFlag::kEnter)) {
         logger::trace("Player entered cell: {}", cell->GetName());
-        setListenCellChange(false);
+		listen_cellchange.store(false);
         M->ClearWOUpdateQueue();
         HandleWOsInCell();
-        setListenCellChange(true);
+		listen_cellchange.store(true);
     }
 
     return RE::BSEventNotifyControl::kContinue;

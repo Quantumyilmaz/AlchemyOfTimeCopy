@@ -23,8 +23,8 @@ class OurEventSink : public RE::BSTEventSink<RE::TESEquipEvent>,
     RE::UI* ui = RE::UI::GetSingleton();
     Manager* M = nullptr;
 
-    bool listen_menu = true;
-    bool listen_cellchange = true;
+    std::atomic<bool> listen_menu = true;
+    std::atomic<bool> listen_cellchange = true;
 
     FormID consume_equipped_id;  // set in equip event only when equipped and used in container event (consume)
     float consume_equipped_t;
@@ -36,28 +36,6 @@ class OurEventSink : public RE::BSTEventSink<RE::TESEquipEvent>,
     bool world_objects_evolve = false;
 
     RE::NiPointer<RE::TESObjectREFR> furniture = nullptr;
-
-    std::mutex mutex;
-
-    void setListenMenu(bool val) { 
-        std::lock_guard<std::mutex> lock(mutex);
-        listen_menu = val; 
-    }
-
-    void setListenCellChange(bool val) { 
-		std::lock_guard<std::mutex> lock(mutex);
-		listen_cellchange = val; 
-	}
-
-    [[nodiscard]] bool getListenCellChange() {
-        std::lock_guard<std::mutex> lock(mutex);
-        return listen_cellchange;
-    }
-
-    [[nodiscard]] bool getListenMenu() { 
-		std::lock_guard<std::mutex> lock(mutex);
-		return listen_menu; 
-	}
 
     void RefreshMenu(const RE::BSFixedString& menuName, RE::TESObjectREFR* inventory);
 
