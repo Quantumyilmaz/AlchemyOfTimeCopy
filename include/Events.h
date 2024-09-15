@@ -25,7 +25,6 @@ class OurEventSink : public RE::BSTEventSink<RE::TESEquipEvent>,
 
     bool listen_menu = true;
     bool listen_cellchange = true;
-	bool block_eventsinks = false;
 
     FormID consume_equipped_id;  // set in equip event only when equipped and used in container event (consume)
     float consume_equipped_t;
@@ -66,7 +65,7 @@ class OurEventSink : public RE::BSTEventSink<RE::TESEquipEvent>,
 
 
 public:
-
+    
     OurEventSink(bool wo_evolve, Manager* mngr)
         : world_objects_evolve(wo_evolve), M(mngr){};
 
@@ -75,6 +74,9 @@ public:
         static OurEventSink singleton(wo_evolve,manager);
         return &singleton;
     }
+
+    std::atomic<bool> block_eventsinks = false;
+
 
     void HandleWOsInCell();
 

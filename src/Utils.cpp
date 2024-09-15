@@ -70,6 +70,16 @@ std::vector<std::string> ReadLogFile()
     return logLines;
 }
 
+std::string DecodeTypeCode(std::uint32_t typeCode)
+{
+    char buf[4];
+    buf[3] = char(typeCode);
+    buf[2] = char(typeCode >> 8);
+    buf[1] = char(typeCode >> 16);
+    buf[0] = char(typeCode >> 24);
+    return std::string(buf, buf + 4);
+}
+
 bool isValidHexWithLength7or8(const char* input)
 {
     std::string inputStr(input);

@@ -37,9 +37,9 @@ public:
 
     virtual const char* GetType() = 0;
 
-    virtual bool Save(SKSE::SerializationInterface* serializationInterface, std::uint32_t type, std::uint32_t version) {return false;};
-    virtual bool Save(SKSE::SerializationInterface* serializationInterface) {return false;};
-    virtual bool Load(SKSE::SerializationInterface* serializationInterface) {return false;};
+    virtual bool Save(SKSE::SerializationInterface*, std::uint32_t, std::uint32_t) {return false;};
+    virtual bool Save(SKSE::SerializationInterface*) {return false;};
+    virtual bool Load(SKSE::SerializationInterface*) {return false;};
 
     void Clear() {
         Locker locker(m_Lock);

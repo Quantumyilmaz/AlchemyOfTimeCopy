@@ -1,5 +1,6 @@
 #pragma once
 #include <windows.h>
+#include <atomic>
 #include "ClibUtil/editorID.hpp"
 
 const auto mod_name = static_cast<std::string>(SKSE::PluginDeclaration::GetSingleton()->GetName());
@@ -19,6 +20,8 @@ const auto init_err_msgbox = std::format("{}: The mod failed to initialize and w
 void SetupLog();
 std::filesystem::path GetLogPath();
 std::vector<std::string> ReadLogFile();
+
+std::string DecodeTypeCode(std::uint32_t typeCode);
 
 
 inline bool isValidHexWithLength7or8(const char* input);

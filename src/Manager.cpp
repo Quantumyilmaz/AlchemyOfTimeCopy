@@ -1643,6 +1643,26 @@ void Manager::SwapWithStage(RE::TESObjectREFR* wo_ref)
     WorldObject::SwapObjects(wo_ref, st_inst->GetBound(), false);
 }
 
+void Manager::Reset()
+{
+    logger::info("Resetting manager...");
+    for (auto& src : sources) src.Reset();
+    sources.clear();
+    // external_favs.clear();         // we will update this in ReceiveData
+    handle_crafting_instances.clear();
+    faves_list.clear();
+    equipped_list.clear();
+    locs_to_be_handled.clear();
+    Clear();
+	listen_menuopenclose.store(true);
+	listen_activate.store(true);
+	listen_container_change.store(true);
+	listen_crosshair.store(true);
+	isUninstalled.store(false);
+    
+    logger::info("Manager reset.");
+}
+
 void Manager::HandleFormDelete(const FormID a_refid)
 {
     for (auto& src : sources) {
@@ -1654,6 +1674,34 @@ void Manager::HandleFormDelete(const FormID a_refid)
         }
     }
 }
+
+void Manager::SendData()
+{
+    // std::lock_guard<std::mutex> lock(mutex);
+    logger::info("--------Sending data---------");
+    Print();
+    Clear();
+
+    int n_instances = 0;
+    for (auto& src : sources) {
+        for (auto& [loc, instances] : src.data) {
+            if (instances.empty()) continue;
+            SaveDataLHS lhs{{src.formid, src.editorid}, loc};
+            SaveDataRHS rhs;
+            for (auto& st_inst : instances) {
+                auto plain = st_inst.GetPlain();
+                if (plain.is_fake) {
+                    plain.is_faved = IsPlayerFavorited(st_inst.GetBound());
+                    plain.is_equipped = IsEquipped(st_inst.GetBound());
+                }
+                rhs.push_back(st_inst.GetPlain());
+                n_instances++;
+            }
+            if (!rhs.empty()) SetData(lhs, rhs);
+        }
+    }
+    logger::info("Data sent. Number of instances: {}", n_instances);
+};
 
 void Manager::_HandleLoc(RE::TESObjectREFR* loc_ref)
 {
@@ -1742,6 +1790,184 @@ void Manager::_HandleLoc(RE::TESObjectREFR* loc_ref)
     }
 
     logger::trace("HandleLoc: synced with loc {}.", loc_refid);
+}
+
+StageInstance* Manager::_RegisterAtReceiveData(const FormID source_formid, const RefID loc, const StageInstancePlain& st_plain)
+{
+     {
+        if (!source_formid) {
+            logger::warn("Formid is null.");
+            return nullptr;
+        }
+
+        const auto count = st_plain.count;
+        if (!count) {
+            logger::warn("Count is 0.");
+            return nullptr;
+        }
+        if (!loc) {
+            logger::warn("loc is 0.");
+            return nullptr;
+        }
+
+        if (GetNInstances() > _instance_limit) {
+            logger::warn("Instance limit reached.");
+            MsgBoxesNotifs::InGame::CustomMsg(
+                std::format("The mod is tracking over {} instances. Maybe it is not bad to check your memory usage and "
+                            "skse co-save sizes.",
+                            _instance_limit));
+        }
+
+        logger::trace("Registering new instance.Formid {} , Count {} , Location refid {}", source_formid, count, loc);
+        // make new registry
+
+        auto* src = ForceGetSource(source_formid);
+        if (!src) {
+            logger::warn("Source could not be obtained.");
+            return nullptr;
+        }
+
+        const auto stage_no = st_plain.no;
+        if (!src->IsStageNo(stage_no)) {
+            logger::warn("Stage not found.");
+            return nullptr;
+        }
+
+        StageInstance new_instance(st_plain.start_time, stage_no, st_plain.count);
+        const auto& stage_temp = src->GetStage(stage_no);
+        new_instance.xtra.form_id = stage_temp.formid;
+        new_instance.xtra.editor_id = clib_util::editorID::get_editorID(stage_temp.GetBound());
+        new_instance.xtra.crafting_allowed = stage_temp.crafting_allowed;
+        if (src->IsFakeStage(stage_no)) new_instance.xtra.is_fake = true;
+
+        new_instance.SetDelay(st_plain);
+        new_instance.xtra.is_transforming = st_plain.is_transforming;
+
+        if (!src->InsertNewInstance(new_instance, loc)) {
+            logger::warn("RegisterAtReceiveData: InsertNewInstance failed.");
+            return nullptr;
+        } else {
+            logger::trace("New instance registered at load game.");
+            return &src->data[loc].back();
+        }
+    }
+}
+
+void Manager::ReceiveData()
+{
+    logger::info("--------Receiving data---------");
+
+    // std::lock_guard<std::mutex> lock(mutex);
+
+    //      if (DFT->GetNDeleted() > 0) {
+    //          logger::critical("ReceiveData: Deleted forms exist.");
+    //          return RaiseMngrErr("ReceiveData: Deleted forms exist.");
+    //}
+
+    if (m_Data.empty()) {
+        logger::warn("ReceiveData: No data to receive.");
+        return;
+    } else if (should_reset) {
+        logger::info("ReceiveData: User wants to reset.");
+        Reset();
+        MsgBoxesNotifs::InGame::CustomMsg(
+            "The mod has been reset. Please save and close the game. Do not forget to set bReset back to false in "
+            "the INI before loading your save.");
+        return;
+    }
+
+    // I need to deal with the fake forms from last session
+    // trying to make sure that the fake forms in bank will be used when needed
+	auto* DFT = DynamicFormTracker::GetSingleton();
+    const auto source_forms = DFT->GetSourceForms();
+    for (const auto& [source_formid, source_editorid] : source_forms) {
+        if (auto* source_temp = ForceGetSource(
+                source_formid);  // DFT nin receive datasinda editorid ile formid nin uyusmasini garantiledim
+            source_temp && source_temp->IsHealthy() && source_temp->formid == source_formid) {
+            StageNo stage_no_temp = 0;
+            while (source_temp->IsStageNo(stage_no_temp)) {
+                // making sure that there will be a matching fake in the bank when requested later
+                // if there are more fake stages than in the bank, np
+                // if other way around, the unused fakes in the bank will be deleted
+                if (source_temp->IsFakeStage(stage_no_temp)) {
+                    const auto fk_formid =
+                        DFT->Fetch(source_formid, source_editorid, static_cast<uint32_t>(stage_no_temp));
+                    if (fk_formid != 0)
+                        DFT->EditCustomID(fk_formid, static_cast<uint32_t>(stage_no_temp));
+                    else
+                        source_temp->GetStage(
+                            stage_no_temp);  // creates the dynamic form with stage no as custom id
+                }
+                stage_no_temp++;
+            }
+        }
+    }
+
+    DFT->ApplyMissingActiveEffects();
+
+    /////////////////////////////////
+
+    int n_instances = 0;
+    for (const auto& [lhs, rhs] : m_Data) {
+        const auto& formeditorid = lhs.first;
+        auto source_formid = formeditorid.form_id;
+        const auto& source_editorid = formeditorid.editor_id;
+        const auto loc = lhs.second;
+        if (!source_formid) {
+            logger::error("ReceiveData: Formid is null.");
+            continue;
+        }
+        if (source_editorid.empty()) {
+            logger::error("ReceiveData: Editorid is empty.");
+            continue;
+        }
+        const auto source_form = GetFormByID(0, source_editorid);
+        if (!source_form) {
+            logger::critical("ReceiveData: Source form not found. Saved formid: {}, editorid: {}", source_formid,
+                                source_editorid);
+            continue;
+        }
+        if (source_form->GetFormID() != source_formid) {
+            logger::warn("ReceiveData: Source formid does not match. Saved formid: {}, editorid: {}", source_formid,
+                            source_editorid);
+            source_formid = source_form->GetFormID();
+        }
+        for (const auto& st_plain : rhs) {
+            if (st_plain.is_fake) locs_to_be_handled[loc].push_back(st_plain.form_id);
+            auto* inserted_instance = _RegisterAtReceiveData(source_formid, loc, st_plain);
+            if (!inserted_instance) {
+                logger::warn("ReceiveData: could not insert instance: formid: {}, loc: {}", source_formid, loc);
+                continue;
+            }
+            n_instances++;
+        }
+    }
+
+    logger::trace("Deleting unused fake forms from bank.");
+    setListenContainerChange(false);
+    DFT->DeleteInactives();
+    setListenContainerChange(true);
+    if (DFT->GetNDeleted() > 0) {
+        logger::warn("ReceiveData: Deleted forms exist. User is required to restart.");
+        MsgBoxesNotifs::InGame::CustomMsg(
+            "It seems the configuration has changed from your previous session"
+            " that requires you to restart the game."
+            "DO NOT IGNORE THIS:"
+            "1. Save your game."
+            "2. Exit the game."
+            "3. Restart the game."
+            "4. Load the saved game."
+            "JUST DO IT! NOW! BEFORE DOING ANYTHING ELSE!");
+    } else {
+        _HandleLoc(player_ref);
+        auto it = locs_to_be_handled.find(player_refid);
+        if (it != locs_to_be_handled.end()) {
+            locs_to_be_handled.erase(it);
+        }
+        Print();
+    }
+
+    logger::info("--------Data received. Number of instances: {}---------", n_instances);
 }
 
 const std::vector<Source>& Manager::GetSources() const

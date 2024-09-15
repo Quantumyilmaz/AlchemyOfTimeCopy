@@ -85,8 +85,8 @@ void OurEventSink::HandleWOsInCell()
 
 RE::BSEventNotifyControl OurEventSink::ProcessEvent(const RE::TESEquipEvent* event, RE::BSTEventSource<RE::TESEquipEvent>*)
 {
-    if (block_eventsinks) return RE::BSEventNotifyControl::kContinue;
-    if (!M->getListenEquip()) return RE::BSEventNotifyControl::kContinue;
+    if (block_eventsinks.load()) return RE::BSEventNotifyControl::kContinue;
+    if (!M->listen_equip.load()) return RE::BSEventNotifyControl::kContinue;
     if (!event) return RE::BSEventNotifyControl::kContinue;
     if (!event->actor->IsPlayerRef()) return RE::BSEventNotifyControl::kContinue;
     if (!Settings::IsItem(event->baseObject)) return RE::BSEventNotifyControl::kContinue;
@@ -121,7 +121,7 @@ RE::BSEventNotifyControl OurEventSink::ProcessEvent(const RE::TESEquipEvent* eve
 
 RE::BSEventNotifyControl OurEventSink::ProcessEvent(const RE::TESActivateEvent* event, RE::BSTEventSource<RE::TESActivateEvent>*)
 {
-    if (block_eventsinks) return RE::BSEventNotifyControl::kContinue;
+    if (block_eventsinks.load()) return RE::BSEventNotifyControl::kContinue;
     if (!event) return RE::BSEventNotifyControl::kContinue;
     if (!event->objectActivated) return RE::BSEventNotifyControl::kContinue;
     if (event->objectActivated == RE::PlayerCharacter::GetSingleton()->GetGrabbedRef()) return RE::BSEventNotifyControl::kContinue;
@@ -136,7 +136,7 @@ RE::BSEventNotifyControl OurEventSink::ProcessEvent(const RE::TESActivateEvent* 
         return RE::BSEventNotifyControl::kContinue;
     }
         
-    if (M->getPO3UoTInstalled()) {
+    if (M->po3_use_or_take.load()) {
         if (auto base = event->objectActivated->GetBaseObject()) {
             RE::BSString str;
             base->GetActivateText(RE::PlayerCharacter::GetSingleton(), str);
@@ -154,10 +154,10 @@ RE::BSEventNotifyControl OurEventSink::ProcessEvent(const RE::TESActivateEvent* 
 
 RE::BSEventNotifyControl OurEventSink::ProcessEvent(const SKSE::CrosshairRefEvent* event, RE::BSTEventSource<SKSE::CrosshairRefEvent>*)
 {
-    if (block_eventsinks) return RE::BSEventNotifyControl::kContinue;
+    if (block_eventsinks.load()) return RE::BSEventNotifyControl::kContinue;
     if (!event) return RE::BSEventNotifyControl::kContinue;
     if (!event->crosshairRef) return RE::BSEventNotifyControl::kContinue;
-    if (!M->getListenCrosshair()) return RE::BSEventNotifyControl::kContinue;
+    if (!M->listen_crosshair.load()) return RE::BSEventNotifyControl::kContinue;
 
 
     if (M->IsExternalContainer(event->crosshairRef.get())) M->UpdateStages(event->crosshairRef.get());
@@ -169,7 +169,7 @@ RE::BSEventNotifyControl OurEventSink::ProcessEvent(const SKSE::CrosshairRefEven
 
 RE::BSEventNotifyControl OurEventSink::ProcessEvent(const RE::MenuOpenCloseEvent* event, RE::BSTEventSource<RE::MenuOpenCloseEvent>*)
 {
-    if (block_eventsinks) return RE::BSEventNotifyControl::kContinue;
+    if (block_eventsinks.load()) return RE::BSEventNotifyControl::kContinue;
     if (!event) return RE::BSEventNotifyControl::kContinue;
     if (!event->opening) return RE::BSEventNotifyControl::kContinue;
     if (!getListenMenu()) return RE::BSEventNotifyControl::kContinue;
@@ -217,7 +217,7 @@ RE::BSEventNotifyControl OurEventSink::ProcessEvent(const RE::MenuOpenCloseEvent
 
 RE::BSEventNotifyControl OurEventSink::ProcessEvent(const RE::TESFurnitureEvent* event, RE::BSTEventSource<RE::TESFurnitureEvent>*)
 {
-    if (block_eventsinks) return RE::BSEventNotifyControl::kContinue;
+    if (block_eventsinks.load()) return RE::BSEventNotifyControl::kContinue;
     if (!event) return RE::BSEventNotifyControl::kContinue;
     if (!event->actor->IsPlayerRef()) return RE::BSEventNotifyControl::kContinue;
     if (furniture_entered && event->type == RE::TESFurnitureEvent::FurnitureEventType::kEnter)
@@ -257,10 +257,8 @@ RE::BSEventNotifyControl OurEventSink::ProcessEvent(const RE::TESFurnitureEvent*
 
 RE::BSEventNotifyControl OurEventSink::ProcessEvent(const RE::TESContainerChangedEvent* event, RE::BSTEventSource<RE::TESContainerChangedEvent>*)
 {
-    if (block_eventsinks) return RE::BSEventNotifyControl::kContinue;
-    logger::trace("ListenContainerChange: {}",
-                    M->getListenContainerChange());
-    if (!M->getListenContainerChange()) return RE::BSEventNotifyControl::kContinue;
+    if (block_eventsinks.load()) return RE::BSEventNotifyControl::kContinue;
+    if (!M->listen_container_change.load()) return RE::BSEventNotifyControl::kContinue;
     if (furniture_entered && event->newContainer!=player_refid) return RE::BSEventNotifyControl::kContinue;
     if (!event) return RE::BSEventNotifyControl::kContinue;
     if (!event->itemCount) return RE::BSEventNotifyControl::kContinue;
@@ -379,7 +377,7 @@ RE::BSEventNotifyControl OurEventSink::ProcessEvent(const RE::TESContainerChange
         // drop event
         if (!event->newContainer) {
             logger::trace("Dropped.");
-            M->setListenCrosshair(false);
+			M->listen_crosshair.store(false);
             auto reference_ = event->reference;
             logger::trace("Reference: {}", reference_.native_handle());
             RE::TESObjectREFR* ref = WorldObject::TryToGetRefFromHandle(reference_);
@@ -423,7 +421,7 @@ RE::BSEventNotifyControl OurEventSink::ProcessEvent(const RE::TESContainerChange
                 consume_equipped_t = 0;
             } 
             else logger::warn("Ref not found at HandleDrop! Hopefully due to consume.");
-            M->setListenCrosshair(true);
+			M->listen_crosshair.store(true);
         }
         // Barter transfer
         else if (RE::UI::GetSingleton()->IsMenuOpen(RE::BarterMenu::MENU_NAME)) {
@@ -459,7 +457,7 @@ RE::BSEventNotifyControl OurEventSink::ProcessEvent(const RE::TESContainerChange
 
 RE::BSEventNotifyControl OurEventSink::ProcessEvent(const RE::TESSleepStopEvent*, RE::BSTEventSource<RE::TESSleepStopEvent>*)
 {
-    if (block_eventsinks) return RE::BSEventNotifyControl::kContinue;
+    if (block_eventsinks.load()) return RE::BSEventNotifyControl::kContinue;
     logger::trace("Sleep stop event.");
     HandleWOsInCell();
     return RE::BSEventNotifyControl::kContinue;
@@ -467,7 +465,7 @@ RE::BSEventNotifyControl OurEventSink::ProcessEvent(const RE::TESSleepStopEvent*
 
 RE::BSEventNotifyControl OurEventSink::ProcessEvent(const RE::TESWaitStopEvent*, RE::BSTEventSource<RE::TESWaitStopEvent>*)
 {
-    if (block_eventsinks) return RE::BSEventNotifyControl::kContinue;
+    if (block_eventsinks.load()) return RE::BSEventNotifyControl::kContinue;
     logger::trace("Wait stop event.");
     HandleWOsInCell();
     return RE::BSEventNotifyControl::kContinue;

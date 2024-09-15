@@ -17,18 +17,7 @@ class Manager : public Ticker, public SaveLoadData {
     bool worldobjectsevolve = false;
     bool should_reset = false;
 
-    // Use Or Take Compatibility
-    bool po3_use_or_take = false;
-
     // 0x0003eb42 damage health
-
-    bool listen_activate = true;
-    bool listen_equip = true;
-    bool listen_crosshair = true;
-    bool listen_container_change = true;
-    bool listen_menuopenclose = true;
-
-    bool isUninstalled = false;
 
     std::mutex mutex;
 
@@ -128,38 +117,19 @@ public:
         return &singleton;
     }
 
+    // Use Or Take Compatibility
+    std::atomic<bool> po3_use_or_take = false;
+    std::atomic<bool> listen_activate = true;
+    std::atomic<bool> listen_equip = true;
+    std::atomic<bool> listen_crosshair = true;
+    std::atomic<bool> listen_container_change = true;
+    std::atomic<bool> listen_menuopenclose = true;
+
+    std::atomic<bool> isUninstalled = false;
+
 	const char* GetType() override { return "Manager"; }
 
-    inline void Uninstall() {
-        isUninstalled = true;
-        // Uninstall other settings...
-        // Settings::UninstallOtherSettings();
-    }
-
-    void setListenCrosshair(const bool value) {
-        std::lock_guard<std::mutex> lock(mutex);
-        listen_crosshair = value;
-    }
-
-    [[nodiscard]] const bool getListenEquip() {
-        std::lock_guard<std::mutex> lock(mutex);
-        return listen_equip;
-    }
-
-    [[nodiscard]] const bool getListenContainerChange() {
-        std::lock_guard<std::mutex> lock(mutex);
-        return listen_container_change;
-    }
-
-    [[nodiscard]] const bool getListenCrosshair() {
-        std::lock_guard<std::mutex> lock(mutex);
-        return listen_crosshair;
-    }
-
-    [[nodiscard]] const bool getPO3UoTInstalled() {
-        std::lock_guard<std::mutex> lock(mutex);
-        return po3_use_or_take;
-    }
+    inline void Uninstall() {isUninstalled.store(true);}
 
     void ClearWOUpdateQueue() { _ref_stops_.clear(); }
 
@@ -204,13 +174,23 @@ public:
 
 	void SwapWithStage(RE::TESObjectREFR* wo_ref);
 
+    void Reset();
+
 	void HandleFormDelete(const FormID a_refid);
+
+    void SendData();
 
     // for syncing the previous session's data with the current session
     void _HandleLoc(RE::TESObjectREFR* loc_ref);
+    
+    StageInstance* _RegisterAtReceiveData(const FormID source_formid, const RefID loc,
+                                          const StageInstancePlain& st_plain);
+
+    void ReceiveData();
+
+    void Print();
 
     const std::vector<Source>& GetSources() const;
 
-    void Print();
 
 };
