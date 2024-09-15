@@ -16,6 +16,8 @@ const auto general_err_msgbox = std::format("{}: Something went wrong. Please co
 const auto init_err_msgbox = std::format("{}: The mod failed to initialize and will be terminated.", mod_name);
 
 
+void SetupLog();
+
 inline bool isValidHexWithLength7or8(const char* input);
 
 template <class T = RE::TESForm>
