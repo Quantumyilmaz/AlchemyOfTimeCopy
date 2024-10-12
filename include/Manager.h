@@ -99,7 +99,7 @@ public:
     void ClearWOUpdateQueue() { _ref_stops_.clear(); }
 
     // use it only for world objects! checks if there is a stage instance for the given refid
-    [[nodiscard]] bool RefIsRegistered(RefID refid);
+    [[nodiscard]] bool RefIsRegistered(RefID refid) const;
 
     void Register(FormID some_formid, Count count, RefID location_refid,
                                            Duration register_time = 0);
@@ -133,6 +133,8 @@ public:
 	const std::map<RefID, float>& GetUpdateQueue() const { return _ref_stops_; }
 
 	void HandleDynamicWO(RE::TESObjectREFR* ref);
+
+    void HandleWOBaseChange(RE::TESObjectREFR* ref);
 
 
 };

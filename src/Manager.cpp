@@ -543,7 +543,6 @@ void Manager::UpdateWO(RE::TESObjectREFR* ref)
 {
 	logger::trace("UpdateWO: {}", ref->GetName());
 
-    
 
     const RefID refid = ref->GetFormID();
 	const auto curr_time = RE::Calendar::GetSingleton()->GetHoursPassed();
@@ -555,8 +554,10 @@ void Manager::UpdateWO(RE::TESObjectREFR* ref)
         if (src.data.empty()) continue;
         if (!src.data.contains(refid)) continue;
         if (src.data.at(refid).empty()) continue;
-		not_found = false;
+        HandleWOBaseChange(ref);
+        if (src.data.at(refid).data()->count <= 0) continue;
 
+        not_found = false;
 
         if (const auto updated_stages = src.UpdateAllStages({refid}, curr_time); updated_stages.contains(refid)) {
 			if (updated_stages.size() > 1) {
@@ -593,7 +594,7 @@ void Manager::UpdateRef(RE::TESObjectREFR* loc)
 	}
 }
 
-bool Manager::RefIsRegistered(const RefID refid) {
+bool Manager::RefIsRegistered(const RefID refid) const {
     if (!refid) {
         logger::warn("Refid is null.");
         return false;
@@ -603,7 +604,7 @@ bool Manager::RefIsRegistered(const RefID refid) {
         return false;
     }
     for (auto& src : sources) {
-        if (src.data.contains(refid) && !src.data[refid].empty()) return true;
+        if (src.data.contains(refid) && !src.data.at(refid).empty()) return true;
     }
     return false;
 }
@@ -882,14 +883,11 @@ void Manager::SwapWithStage(RE::TESObjectREFR* wo_ref)
         logger::critical("Ref is null.");
         return;
     }
-    const auto st_inst = GetWOStageInstance(wo_ref);
+    const auto* st_inst = GetWOStageInstance(wo_ref);
     if (!st_inst) {
         logger::warn("SwapWithStage: Source not found.");
         return;
     }
-    // remove the extra data that cause issues when dropping
-    //xData::PrintObjectExtraData(wo_ref);
-    for (const auto& i : Settings::xRemove) wo_ref->extraList.RemoveByType(static_cast<RE::ExtraDataType>(i));
     WorldObject::SwapObjects(wo_ref, st_inst->GetBound(), false);
 }
 
@@ -1189,5 +1187,22 @@ void Manager::HandleDynamicWO(RE::TESObjectREFR* ref)
 		const auto* src = GetSource(bound->GetFormID());
 		if (!src) return;
         WorldObject::SwapObjects(ref, src->GetBoundObject(), false);
+	}
+}
+
+void Manager::HandleWOBaseChange(RE::TESObjectREFR* ref)
+{
+	if (!ref) return;
+	if (const auto bound = ref->GetObjectReference()) {
+		if (bound->IsDynamicForm()) return HandleDynamicWO(ref);
+		auto* src = GetSource(bound->GetFormID());
+		if (!src || !src->IsHealthy()) return;
+        auto* st_inst = GetWOStageInstance(ref);
+		if (!st_inst || st_inst->count <= 0) return;
+		const auto* bound_expected = src->IsFakeStage(st_inst->no) ? src->GetBoundObject() : st_inst->GetBound();
+        if (bound_expected->GetFormID() != bound->GetFormID()) {
+	        st_inst->count = 0;
+			queue_delete_.insert(ref->GetFormID());
+        }
 	}
 }
