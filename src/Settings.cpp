@@ -2,20 +2,20 @@
 #include "SimpleIni.h"
 
 
-const bool Settings::IsQFormType(const FormID formid, const std::string& qformtype)
-{
+bool Settings::IsQFormType(const FormID formid, const std::string& qformtype) {
     // POPULATE THIS
-    if (qformtype == "FOOD") return IsFoodItem(formid);
-    else if (qformtype == "INGR") return FormIsOfType(formid, RE::IngredientItem::FORMTYPE);
-    else if (qformtype == "MEDC") return IsMedicineItem(formid);
-    else if (qformtype == "POSN") return IsPoisonItem(formid);
-    else if (qformtype == "ARMO") return FormIsOfType(formid,RE::TESObjectARMO::FORMTYPE);
-    else if (qformtype == "WEAP") return FormIsOfType(formid,RE::TESObjectWEAP::FORMTYPE);
-    else if (qformtype == "SCRL") return FormIsOfType(formid, RE::ScrollItem::FORMTYPE);
-	else if (qformtype == "BOOK") return FormIsOfType(formid,RE::TESObjectBOOK::FORMTYPE);
-    else if (qformtype == "SLGM") return FormIsOfType(formid, RE::TESSoulGem::FORMTYPE);
-	else if (qformtype == "MISC") return FormIsOfType(formid,RE::TESObjectMISC::FORMTYPE);
-    else return false;
+	auto* form = GetFormByID(formid);
+    if (qformtype == "FOOD") return IsFoodItem(form);
+    if (qformtype == "INGR") return FormIsOfType(form, RE::IngredientItem::FORMTYPE);
+    if (qformtype == "MEDC") return IsMedicineItem(form);
+    if (qformtype == "POSN") return IsPoisonItem(form);
+    if (qformtype == "ARMO") return FormIsOfType(form,RE::TESObjectARMO::FORMTYPE);
+    if (qformtype == "WEAP") return FormIsOfType(form,RE::TESObjectWEAP::FORMTYPE);
+    if (qformtype == "SCRL") return FormIsOfType(form, RE::ScrollItem::FORMTYPE);
+	if (qformtype == "BOOK") return FormIsOfType(form,RE::TESObjectBOOK::FORMTYPE);
+    if (qformtype == "SLGM") return FormIsOfType(form, RE::TESSoulGem::FORMTYPE);
+	if (qformtype == "MISC") return FormIsOfType(form,RE::TESObjectMISC::FORMTYPE);
+    return false;
 }
 
 std::string Settings::GetQFormType(const FormID formid)
@@ -26,8 +26,7 @@ std::string Settings::GetQFormType(const FormID formid)
 	return "";
 }
 
-const bool Settings::IsInExclude(const FormID formid, std::string type)
-{
+bool Settings::IsInExclude(const FormID formid, std::string type) {
 	auto form = GetFormByID(formid);
     if (!form) {
         logger::warn("Form not found.");
@@ -36,7 +35,7 @@ const bool Settings::IsInExclude(const FormID formid, std::string type)
         
     if (type.empty()) type = GetQFormType(formid);
     if (type.empty()) {
-        logger::trace("Type is empty. for formid: {}", formid);
+        //logger::trace("Type is empty. for formid: {}", formid);
 		return false;
 	}
     if (!Settings::exclude_list.count(type)) {
@@ -60,16 +59,14 @@ const bool Settings::IsInExclude(const FormID formid, std::string type)
     return false;
 }
 
-const bool Settings::IsItem(const FormID formid, std::string type, bool check_exclude)
-{
+bool Settings::IsItem(const FormID formid, std::string type, bool check_exclude) {
     if (!formid) return false;
     if (check_exclude && Settings::IsInExclude(formid, type)) return false;
     if (type.empty()) return !GetQFormType(formid).empty();
 	else return IsQFormType(formid, type);
 }
 
-const bool Settings::IsItem(const RE::TESObjectREFR* ref, std::string type)
-{
+bool Settings::IsItem(const RE::TESObjectREFR* ref, std::string type) {
     if (!ref) return false;
     if (ref->IsDisabled()) return false;
     if (ref->IsDeleted()) return false;
@@ -103,7 +100,7 @@ std::vector<std::string> LoadExcludeList(const std::string postfix)
     return result;
 }
 
-DefaultSettings _parseDefaults(const YAML::Node& config)
+DefaultSettings parseDefaults_(const YAML::Node& config)
  {
     logger::info("Parsing settings.");
     DefaultSettings settings;
@@ -142,7 +139,7 @@ DefaultSettings _parseDefaults(const YAML::Node& config)
         if (!stageNode["name"].IsNull()) {
             const auto temp_name = stageNode["name"].as<StageName>();
             // if it is empty, or just whitespace, set it to empty
-            if (temp_name.empty() || std::all_of(temp_name.begin(), temp_name.end(), isspace))
+            if (temp_name.empty() || std::ranges::all_of(temp_name, isspace))
 				settings.stage_names[temp_no] = "";
 			else settings.stage_names[temp_no] = stageNode["name"].as<StageName>();
         } else settings.stage_names[temp_no] = "";
@@ -180,8 +177,8 @@ DefaultSettings _parseDefaults(const YAML::Node& config)
                 if (temp_effect_formid>0){
                     const auto temp_magnitude = effectNode["magnitude"].as<float>();
                     const auto temp_duration = effectNode["duration"].as<DurationMGEFF>();
-                    effects.push_back(StageEffect(temp_effect_formid, temp_magnitude, temp_duration));
-                } else effects.push_back(StageEffect(temp_effect_formid, 0, 0));
+                    effects.emplace_back(temp_effect_formid, temp_magnitude, temp_duration);
+                } else effects.emplace_back(temp_effect_formid, 0.f, 0);
                 // currently only one allowed
                 break;
             }
@@ -257,7 +254,7 @@ DefaultSettings parseDefaults(std::string _type)
     logger::info("Filename: {}", filename);
 	YAML::Node config = YAML::LoadFile(filename);
     logger::info("File loaded.");
-    auto temp_settings = _parseDefaults(config);
+    auto temp_settings = parseDefaults_(config);
     if (!temp_settings.CheckIntegrity()) {
         logger::warn("parseDefaults: Settings integrity check failed for {}", _type);
     }
@@ -281,22 +278,20 @@ CustomSettings parseCustoms(std::string _type)
 				continue;
 			}
 
-            for (const auto& _Node : config["ownerLists"]){
+            for (const auto& Node_ : config["ownerLists"]){
                 // we have list of owners at each node or a scalar owner
-                if (_Node["owners"].IsScalar()) {
-                    const auto ownerName = _Node["owners"].as<std::string>();
-                    auto temp_settings = _parseDefaults(_Node);
-                    if (temp_settings.CheckIntegrity())
+                if (Node_["owners"].IsScalar()) {
+                    const auto ownerName = Node_["owners"].as<std::string>();
+                    if (auto temp_settings = parseDefaults_(Node_); temp_settings.CheckIntegrity())
                         _custom_settings[std::vector<std::string>{ownerName}] = temp_settings;
 			    } 
                 else {
 				    std::vector<std::string> owners;
-                    for (const auto& owner : _Node["owners"]) {
+                    for (const auto& owner : Node_["owners"]) {
 					    owners.push_back(owner.as<std::string>());
 				    }
 
-                    auto temp_settings = _parseDefaults(_Node);
-                    if (temp_settings.CheckIntegrity())
+                    if (auto temp_settings = parseDefaults_(Node_); temp_settings.CheckIntegrity())
                         _custom_settings[owners] = temp_settings;
 			    }
             }
@@ -347,6 +342,7 @@ void LoadINISettings()
     Settings::nForgettingTime = std::min(Settings::nForgettingTime, 4320);
 
     Settings::disable_warnings = ini.GetBoolValue("Other Settings", "DisableWarnings", Settings::disable_warnings);
+    Settings::world_objects_evolve = ini.GetBoolValue("Other Settings", "WorldObjectsEvolve", Settings::world_objects_evolve);
 		
     ini.SaveFile(Settings::INI_path);
 }

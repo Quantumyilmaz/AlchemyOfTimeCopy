@@ -21,52 +21,53 @@ struct Source {
         //empty_mgeff(e_m), 
         defaultsettings(sttngs) { Init(); };
 
-    [[maybe_unused]] const std::string_view GetName();
+    [[maybe_unused]] [[nodiscard]] std::string_view GetName() const;
 
-    inline RE::TESBoundObject* GetBoundObject() const { return GetFormByID<RE::TESBoundObject>(formid, editorid); };
+    RE::TESBoundObject* GetBoundObject() const { return GetFormByID<RE::TESBoundObject>(formid, editorid); };
 
-    const std::map<RefID,std::vector<StageUpdate>> UpdateAllStages(const std::vector<RefID>& filter,const float curr_time);
+    std::map<RefID,std::vector<StageUpdate>> UpdateAllStages(const std::vector<RefID>& filter, float time);
 
     // daha once yaratilmis bi stage olmasi gerekiyo
-    const bool IsStage(const FormID some_formid);
+    bool IsStage(FormID some_formid);
 
-    inline const bool IsStageNo(const StageNo no) const;
+    [[nodiscard]] inline bool IsStageNo(StageNo no) const;
 
-    [[nodiscard]] inline const bool IsFakeStage(const StageNo no) const;
+    [[nodiscard]] inline bool IsFakeStage(StageNo no) const;
 
     // assumes that the formid exists as a stage!
-    [[nodiscard]] const StageNo GetStageNo(const FormID formid_);
+    [[nodiscard]] StageNo GetStageNo(FormID formid_);
 
-    const Stage& GetStage(const StageNo no);
+    const Stage& GetStage(StageNo no);
+    [[nodiscard]] const Stage* GetStageSafe(StageNo no) const;
 
-    const Duration GetStageDuration(const StageNo no) const;
+    [[nodiscard]] Duration GetStageDuration(StageNo no) const;
 
-    const std::string GetStageName(const StageNo no) const;
+    [[nodiscard]] std::string GetStageName(StageNo no) const;
 
-    [[nodiscard]] const bool InsertNewInstance(StageInstance& stage_instance, const RefID loc);
+    StageInstance* InsertNewInstance(const StageInstance& stage_instance, RefID loc);
 
-    [[nodiscard]] const bool InitInsertInstanceWO(StageNo n, Count c, RefID l, Duration t_0);
+    StageInstance* InitInsertInstanceWO(StageNo n, Count c, RefID l, Duration t_0);
 
     // applies time modulation to all instances in the inventory
-    [[nodiscard]] const bool InitInsertInstanceInventory(StageNo n, Count c, RE::TESObjectREFR* inventory_owner,
-                                                         Duration t_0);
+    [[nodiscard]] bool InitInsertInstanceInventory(StageNo n, Count c, RE::TESObjectREFR* inventory_owner,
+                                                   Duration t_0);
     
-    [[nodiscard]] const bool MoveInstance(const RefID from_ref, const RefID to_ref, StageInstance* st_inst);
+    [[nodiscard]] bool MoveInstance(RefID from_ref, RefID to_ref, const StageInstance* st_inst);
 
-    Count MoveInstances(const RefID from_ref, const RefID to_ref, const FormID instance_formid, Count count, const bool older_first);
+    Count MoveInstances(RefID from_ref, RefID to_ref, FormID instance_formid, Count count, bool older_first);
     
-    [[nodiscard]] inline const bool IsTimeModulator(const FormID _form_id) const;
+    [[nodiscard]] inline bool IsTimeModulator(FormID _form_id) const;
 
-    [[nodiscard]] const bool IsDecayedItem(const FormID _form_id) const;
+    [[nodiscard]] bool IsDecayedItem(FormID _form_id) const;
 
-    const FormID inline GetModulatorInInventory(RE::TESObjectREFR* inventory_owner);
+    FormID inline GetModulatorInInventory(RE::TESObjectREFR* inventory_owner) const;
 
-    inline const FormID GetTransformerInInventory(RE::TESObjectREFR* inventory_owner);
+    inline FormID GetTransformerInInventory(RE::TESObjectREFR* inventory_owner) const;
 
     // always update before doing this
-    void UpdateTimeModulationInInventory(RE::TESObjectREFR* inventory_owner, const float _time);
+    void UpdateTimeModulationInInventory(RE::TESObjectREFR* inventory_owner, float _time);
 
-    const float GetNextUpdateTime(StageInstance* st_inst);
+    float GetNextUpdateTime(StageInstance* st_inst);
 
     void CleanUpData();
 
@@ -74,9 +75,11 @@ struct Source {
 
     void Reset();
     
-    [[nodiscard]] inline const bool IsHealthy() const { 
+    [[nodiscard]] bool IsHealthy() const { 
         return !init_failed;
 	}
+
+	const Stage& GetDecayedStage() const { return decayed_stage; }
 
 private:
 
@@ -93,7 +96,7 @@ private:
     StageDict stages;
 
     // counta karismiyor
-    [[nodiscard]] const bool _UpdateStageInstance(StageInstance& st_inst, const float curr_time);
+    [[nodiscard]] bool UpdateStageInstance(StageInstance& st_inst, float curr_time);
 
     template <typename T>
     void ApplyMGEFFSettings(T* stage_form, std::vector<StageEffect>& settings_effs) {
@@ -149,24 +152,24 @@ private:
         }
     }
 
-    const size_t GetNStages() const;
+    size_t GetNStages() const;
     
-    [[nodiscard]] const Stage GetFinalStage() const;
+    [[nodiscard]] Stage GetFinalStage() const;
 
-    [[nodiscard]] const Stage GetTransformedStage(const FormID key_formid) const;
+    [[nodiscard]] Stage GetTransformedStage(FormID key_formid) const;
 
-    void SetDelayOfInstances(const float some_time, RE::TESObjectREFR* inventory_owner);
+    void SetDelayOfInstances(float some_time, RE::TESObjectREFR* inventory_owner);
 
-    void SetDelayOfInstance(StageInstance& instance, const float curr_time,
-                             RE::TESObjectREFR* inventory_owner);
+    void SetDelayOfInstance(StageInstance& instance, float curr_time,
+                             RE::TESObjectREFR* inventory_owner) const;
    
-    [[nodiscard]] const bool CheckIntegrity();
+    [[nodiscard]] bool CheckIntegrity();
 
-    const float GetDecayTime(const StageInstance& st_inst);
+    float GetDecayTime(const StageInstance& st_inst);
 
     inline void InitFailed();
 
-    void RegisterStage(const FormID stage_formid,const StageNo stage_no);
+    void RegisterStage(FormID stage_formid, StageNo stage_no);
 
     template <typename T>
     const FormID FetchFake(const StageNo st_no) {
@@ -196,7 +199,7 @@ private:
             const auto new_name = std::string(og_name) + " (" + name + ")";
             if (!name.empty() && std::strcmp(stage_form->fullName.c_str(), new_name.c_str()) != 0) {
                 stage_form->fullName = new_name;
-                logger::info("Updated name of fake form to {}", name);
+                logger::trace("Updated name of fake form to {}", name);
             }
 
             // Update value of the fake form
@@ -222,7 +225,7 @@ private:
     };
 
     // also registers to stages
-    const FormID FetchFake(const StageNo st_no);
+    FormID FetchFake(StageNo st_no);
 
-    const StageNo GetLastStageNo();
+    StageNo GetLastStageNo();
 };

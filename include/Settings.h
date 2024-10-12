@@ -12,7 +12,7 @@ namespace Settings {
     
     inline bool failed_to_load = false;
     constexpr auto INI_path = L"Data/SKSE/Plugins/AlchemyOfTime.ini";
-        const std::map<const char*, bool> moduleskeyvals = {{"FOOD",false},
+    const std::map<const char*, bool> moduleskeyvals = {{"FOOD",false},
 														{"INGR",false},
                                                         {"MEDC",false},
                                                         {"POSN",false},
@@ -29,14 +29,15 @@ namespace Settings {
     inline int nMaxInstances = 200000;
     inline int nForgettingTime = 2160;  // in hours
     inline bool disable_warnings = false;
+    inline bool world_objects_evolve = false;
 
 
 
     const std::vector<std::string> fakes_allowedQFORMS = {"FOOD", "MISC"};
     const std::vector<std::string> xQFORMS = {"ARMO", "WEAP", "SLGM", "MEDC", "POSN"};  // xdata is carried over in item transitions
     const std::vector<std::string> mgeffs_allowedQFORMS = {"FOOD"};
-    const std::vector<std::string> consumableQFORMS = {"FOOD", "INGR", "MEDC", "POSN", "SCRL", "BOOK", "SLGM", "MISC"};
-    const std::vector<std::string> updateonequipQFORMS = {"ARMO", "WEAP"};
+    [[maybe_unused]] const std::vector<std::string> consumableQFORMS = {"FOOD", "INGR", "MEDC", "POSN", "SCRL", "BOOK", "SLGM", "MISC"};
+    [[maybe_unused]] const std::vector<std::string> updateonequipQFORMS = {"ARMO", "WEAP"};
     const std::map<unsigned int, std::vector<std::string>> qform_bench_map = {
         {1, {"FOOD"}}
     };
@@ -47,15 +48,15 @@ namespace Settings {
     inline std::map<std::string, CustomSettings> custom_settings;
     inline std::map <std::string,std::vector<std::string>> exclude_list;
 
-    [[nodiscard]] const bool IsQFormType(const FormID formid, const std::string& qformtype);
+    [[nodiscard]] bool IsQFormType(FormID formid, const std::string& qformtype);
 
-    inline std::string GetQFormType(const FormID formid);
+    inline std::string GetQFormType(FormID formid);
 
-	[[nodiscard]] const bool IsInExclude(const FormID formid, std::string type = "");
+	[[nodiscard]] bool IsInExclude(FormID formid, std::string type = "");
 
-    [[nodiscard]] const bool IsItem(const FormID formid, std::string type = "", bool check_exclude=false);
+    [[nodiscard]] bool IsItem(FormID formid, std::string type = "", bool check_exclude = false);
 
-    [[nodiscard]] const bool IsItem(const RE::TESObjectREFR* ref, std::string type = "");
+    [[nodiscard]] bool IsItem(const RE::TESObjectREFR* ref, std::string type = "");
 
 
     // 0x99 - ExtraTextDisplayData 
@@ -84,7 +85,7 @@ namespace Settings {
 };
 
 std::vector<std::string> LoadExcludeList(const std::string postfix);
-DefaultSettings _parseDefaults(const YAML::Node& config);
+DefaultSettings parseDefaults_(const YAML::Node& config);
 DefaultSettings parseDefaults(std::string _type);
 CustomSettings parseCustoms(std::string _type);
 void LoadINISettings();
@@ -92,7 +93,11 @@ void LoadSettings();
 
 
 namespace LogSettings {
+#ifndef NDEBUG
     inline bool log_trace = true;
+#else
+	inline bool log_trace = false;
+#endif
     inline bool log_info = true;
     inline bool log_warning = true;
     inline bool log_error = true;

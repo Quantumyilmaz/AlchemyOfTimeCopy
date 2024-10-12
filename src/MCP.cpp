@@ -22,20 +22,12 @@ void __stdcall UI::RenderSettings()
                     ImGui::TableNextRow();
                     ImGui::TableNextColumn();
                     if (setting_name == "DisableWarnings") {
-                        const auto previous_state = Settings::disable_warnings;
-                        ImGui::Checkbox(setting_name.c_str(), &Settings::disable_warnings);
-                        if (Settings::disable_warnings != previous_state) {
-                            // save to INI
-                            Settings::INI_settings[section_name][setting_name] = Settings::disable_warnings;
-                            CSimpleIniA ini;
-                            ini.SetUnicode();
-                            ini.LoadFile(Settings::INI_path);
-                            ini.SetBoolValue(section_name.c_str(), setting_name.c_str(), Settings::disable_warnings);
-                            ini.SaveFile(Settings::INI_path);
-                        }
-                        ImGui::SameLine();
-                        HelpMarker("Disables in-game warning pop-ups.");
-                    } else {
+                        IniSettingToggle(Settings::disable_warnings,setting_name,section_name,"Disables in-game warning pop-ups.");
+                    }
+                    else if (setting_name == "WorldObjectsEvolve") {
+                        IniSettingToggle(Settings::world_objects_evolve,setting_name,section_name,"Allows items out in the world to transform.");
+                    }
+                    else {
                         // we just want to display the settings in read only mode
                         ImGui::Text(setting_name.c_str());
                     }
@@ -52,8 +44,8 @@ void __stdcall UI::RenderSettings()
 }
 void __stdcall UI::RenderStatus()
  {
-    const auto color_operational = ImVec4(0, 1, 0, 1);
-    const auto color_not_operational = ImVec4(1, 0, 0, 1);
+    constexpr auto color_operational = ImVec4(0, 1, 0, 1);
+    constexpr auto color_not_operational = ImVec4(1, 0, 0, 1);
 
     if (ImGui::BeginTable("table_status", 3, table_flags)) {
         ImGui::TableSetupColumn("Module");
@@ -75,7 +67,7 @@ void __stdcall UI::RenderStatus()
                 
 			std::string loaded_custom_str = "Not Loaded";
 			auto color_custom = color_not_operational;
-            if (custom_presets.size() > 0) {
+            if (!custom_presets.empty()) {
                 loaded_custom_str = std::format("Loaded ({})", custom_presets.size());
                 color_custom = color_operational;
 			}
@@ -83,6 +75,8 @@ void __stdcall UI::RenderStatus()
         }
         ImGui::EndTable();
     }
+
+	ExcludeList();
 }
 void __stdcall UI::RenderInspect()
 {
@@ -92,85 +86,32 @@ void __stdcall UI::RenderInspect()
         return;
     }
 
-    FontAwesome::PushSolid();
-    if (ImGui::Button((FontAwesome::UnicodeToUtf8(0xf021) + " Refresh").c_str())) {
-        last_generated = std::format("{} (in-game hours)", RE::Calendar::GetSingleton()->GetHoursPassed());
-        const auto& sources = M->GetSources();
-
-        locations.clear();
-
-        for (const auto& source : sources) {
-            for (const auto& [location, instances] : source.data) {
-                const auto* locationReference = RE::TESForm::LookupByID<RE::TESObjectREFR>(location);
-                const char* locationName = locationReference ? locationReference->GetName() : (std::format("{:x}", location).c_str());
-
-                for (auto& stageInstance : instances) {
-                    const auto* delayerForm = RE::TESForm::LookupByID(stageInstance.GetDelayerFormID());
-                    auto delayer_name = delayerForm ? delayerForm->GetName() : std::format("{:x}", stageInstance.GetDelayerFormID());
-                    if (delayer_name == "0") delayer_name = "None";
-                    int max_stage_no = 0;
-                    while (source.IsStageNo(max_stage_no+1)) max_stage_no++;
-                        
-                    const auto temp_stage_no = std::make_pair(stageInstance.no, max_stage_no);
-                    auto temp_stagename = source.GetStageName(stageInstance.no);
-                    temp_stagename = temp_stagename.empty() ? "" : std::format("({})", temp_stagename);
-                    Instance instance(
-                        temp_stage_no, 
-                        temp_stagename,
-                        stageInstance.count,
-                        stageInstance.start_time,
-                        source.GetStageDuration(stageInstance.no),
-                        stageInstance.GetDelayMagnitude(),
-                        delayer_name,
-                        stageInstance.xtra.is_fake,
-                        stageInstance.xtra.is_transforming,
-                        stageInstance.xtra.is_decayed
-                    );
-
-                    const auto item = RE::TESForm::LookupByID(source.formid);
-                    locations[std::string(locationName) + "##location"][(item ? item->GetName() : source.editorid)+ "##item"]
-                        .push_back(
-                        instance);
-                }
-            }
-        }
-
-        const auto current = locations.find(item_current);
-        if (current == locations.end()){
-            item_current = "##current";
-            sub_item_current = "##item"; 
-        } else if (const auto item = current->second; item.find(sub_item_current) == item.end()) {
-            sub_item_current = "##item"; 
-        }
-    }
-    FontAwesome::Pop();
-        
-    ImGui::SameLine();
-    ImGui::Text(("Last Generated: " + last_generated).c_str());
+	RefreshButton();
 
     ImGui::Text("Location");
     if (ImGui::BeginCombo("##combo 1", item_current.c_str())) {
-        for (const auto & [key, value] : locations) {
+        for (const auto& key : locations | std::views::keys) {
             if (filter->PassFilter(key.c_str())) {
-                const bool is_selected = item_current == key;
-                if (ImGui::Selectable(key.c_str(), is_selected)) {
+                if (const bool is_selected = item_current == key; ImGui::Selectable(key.c_str(), is_selected)) {
                     item_current = key;
+					UpdateSubItem();
                 }
             }
         }
         ImGui::EndCombo();
     }
-    is_list_box_focused = ImGui::IsItemHovered(ImGuiHoveredFlags_::ImGuiHoveredFlags_NoNavOverride);
+    
     ImGui::SameLine();
+	DrawFilter1();
 
-    is_list_box_focused = is_list_box_focused || ImGui::IsItemActive();
+    is_list_box_focused = ImGui::IsItemHovered(ImGuiHoveredFlags_::ImGuiHoveredFlags_NoNavOverride) || ImGui::IsItemActive();
 
-    if (locations.find(item_current) != locations.end()) 
+    if (locations.contains(item_current)) 
     {
         InstanceMap& selectedItem = locations[item_current];
         ImGui::Text("Item");
         if (ImGui::BeginCombo("##combo 2", sub_item_current.c_str())) {
-            for (const auto& [key, value] : selectedItem) {
+            for (const auto& key : selectedItem | std::views::keys) {
                 if (filter2->PassFilter(key.c_str())) {
                     const bool is_selected = (sub_item_current == key);
                     if (ImGui::Selectable(key.c_str(), is_selected)) {
@@ -185,12 +126,10 @@ void __stdcall UI::RenderInspect()
         }
 
         ImGui::SameLine();
+		DrawFilter2();
 
-        filter2->Draw("#filter2");
-
-        if (selectedItem.find(sub_item_current) != selectedItem.end()) {
-
-            auto & selectedInstances = selectedItem[sub_item_current];
+        if (selectedItem.contains(sub_item_current)) {
+            const auto& selectedInstances = selectedItem[sub_item_current];
 
             ImGui::Text("Instances");
             if (ImGui::BeginTable("table_inspect", 8, table_flags)) {
@@ -228,9 +167,152 @@ void __stdcall UI::RenderInspect()
     }
 
 }
+void __stdcall UI::RenderUpdateQ()
+{
+	if (!M) {
+		ImGui::Text("Not available");
+		return;
+	}
+
+	RefreshButton();
+
+	if (Settings::world_objects_evolve) {
+		ImGui::TextColored(ImVec4(0, 1, 0, 1), "World Objects Evolve: Enabled");
+	}
+	else {
+		ImGui::TextColored(ImVec4(1, 0, 0, 1), "World Objects Evolve: Disabled");
+	}
+
+	if (ImGui::BeginTable("table_queue", 2, table_flags)) {
+		ImGui::TableSetupColumn("Name");
+		ImGui::TableSetupColumn("Update Time");
+		ImGui::TableHeadersRow();
+		for (const auto& [formid, name_stop_time] : update_q) {
+			ImGui::TableNextRow();
+			ImGui::TableNextColumn();
+			ImGui::Text(name_stop_time.first.c_str());
+			ImGui::TableNextColumn();
+			ImGui::Text(std::format("{}", name_stop_time.second).c_str());
+		}
+		ImGui::EndTable();
+	}
+
+}
+void __stdcall UI::RenderStages()
+{
+	if (!M) {
+		ImGui::Text("Not available");
+		return;
+	}
+
+	RefreshButton();
+
+	ImGui::Text("Source List");
+
+	source_current = "Source " + std::to_string(selected_source_index+1) + ": " + mcp_sources[selected_source_index].stages.begin()->item.name;
+
+    if (ImGui::BeginCombo("##SourceList", source_current.c_str())) {
+        for (size_t i = 0; i < mcp_sources.size(); ++i) {
+			if (filter_module != "None" && mcp_sources[i].type != filter_module) continue;
+            std::string label = "Source " + std::to_string(i+1) + ": " + mcp_sources[i].stages.begin()->item.name;
+            if (ImGui::Selectable(label.c_str(), selected_source_index == static_cast<int>(i))) {
+                selected_source_index = static_cast<int>(i);
+				source_current = label;
+            }
+        }
+        ImGui::EndCombo();
+    }
+
+	ImGui::SameLine();
+	const auto module_filter_old = filter_module;
+	if (DrawFilterModule() && module_filter_old != filter_module) {
+        for (size_t i = 0; i < mcp_sources.size(); ++i) {
+			if (filter_module != "None" && mcp_sources[i].type != filter_module) continue;
+			selected_source_index = static_cast<int>(i);
+			source_current = "Source " + std::to_string(i + 1) + ": " + mcp_sources[i].stages.begin()->item.name;
+            break;
+		}
+	}
+
+	if (mcp_sources.empty() || selected_source_index >= mcp_sources.size()) {
+		ImGui::Text("No sources available");
+		return;
+	}
+
+    ImGui::Text("");
+    ImGui::Text("Stages");
+	const auto& src = mcp_sources[selected_source_index];
+
+	if (ImGui::BeginTable("table_stages", 5, table_flags)) {
+		ImGui::TableSetupColumn("Item");
+		ImGui::TableSetupColumn("Name");
+		ImGui::TableSetupColumn("Duration");
+		ImGui::TableSetupColumn("Crafting Allowed");
+		ImGui::TableSetupColumn("Is Dynamic Form");
+		ImGui::TableHeadersRow();
+		for (const auto& stage : src.stages) {
+			ImGui::TableNextRow();
+			ImGui::TableNextColumn();
+			ImGui::Text((stage.item.name + std::format(" ({:x})",stage.item.formid)).c_str());
+			ImGui::TableNextColumn();
+			ImGui::Text(stage.name.c_str());
+			ImGui::TableNextColumn();
+			ImGui::Text(std::format("{}", stage.duration).c_str());
+			ImGui::TableNextColumn();
+			ImGui::Text(stage.crafting_allowed ? "Yes" : "No");
+			ImGui::TableNextColumn();
+			ImGui::Text(stage.is_fake ? "Yes" : "No");
+
+		}
+		ImGui::EndTable();
+	}
+
+
+    ImGui::Text("");
+    ImGui::Text("Transformers");
+	if (ImGui::BeginTable("table_transformers", 3, table_flags)) {
+		ImGui::TableSetupColumn("Item");
+		ImGui::TableSetupColumn("Transformed Item");
+		ImGui::TableSetupColumn("Duration");
+		ImGui::TableHeadersRow();
+		for (const auto& [name, formid] : src.transformers) {
+			ImGui::TableNextRow();
+			ImGui::TableNextColumn();
+			ImGui::Text((name + std::format(" ({:x})", formid)).c_str());
+			//ImGui::TableNextColumn();
+			const auto temp_name = src.transformer_enditems.contains(formid) ? src.transformer_enditems.at(formid).name : std::format("{:x}", formid);
+			ImGui::TableNextColumn();
+			ImGui::Text(temp_name.c_str());
+			ImGui::TableNextColumn();
+			const auto temp_duration = src.transform_durations.contains(formid) ? std::format("{}", src.transform_durations.at(formid)) : "???";
+			ImGui::Text(temp_duration.c_str());
+		}
+		ImGui::EndTable();
+	}
+
+
+    ImGui::Text("");
+	ImGui::Text("Time Modulators");
+	if (ImGui::BeginTable("table_time_modulators", 2, table_flags)) {
+		ImGui::TableSetupColumn("Item");
+        ImGui::TableSetupColumn("Multiplier");
+		ImGui::TableHeadersRow();
+		for (const auto& [name, formid] : src.time_modulators) {
+			ImGui::TableNextRow();
+			ImGui::TableNextColumn();
+			ImGui::Text((name + std::format(" ({:x})", formid)).c_str());
+			ImGui::TableNextColumn();
+			const auto temp_duration = src.time_modulator_multipliers.contains(formid) ? std::format("{}", src.time_modulator_multipliers.at(formid)) : "???";
+			ImGui::Text(temp_duration.c_str());
+		}
+		ImGui::EndTable();
+	}
+}
 void __stdcall UI::RenderLog()
 {
+#ifndef NDEBUG
     ImGui::Checkbox("Trace", &LogSettings::log_trace);
+#endif
     ImGui::SameLine();
     ImGui::Checkbox("Info", &LogSettings::log_info);
     ImGui::SameLine();
@@ -243,10 +325,10 @@ void __stdcall UI::RenderLog()
 
     // Display each line in a new ImGui::Text() element
     for (const auto& line : logLines) {
-        if (line.find("trace") != std::string::npos && !LogSettings::log_trace) continue;
-        if (line.find("info") != std::string::npos && !LogSettings::log_info) continue;
-        if (line.find("warning") != std::string::npos && !LogSettings::log_warning) continue;
-        if (line.find("error") != std::string::npos && !LogSettings::log_error) continue;
+        if (!LogSettings::log_trace && line.find("trace") != std::string::npos) continue;
+        if (!LogSettings::log_info && line.find("info") != std::string::npos) continue;
+        if (!LogSettings::log_warning && line.find("warning") != std::string::npos) continue;
+        if (!LogSettings::log_error && line.find("error") != std::string::npos) continue;
         ImGui::Text(line.c_str());
     }
 }
@@ -264,6 +346,228 @@ void UI::Register(Manager* manager)
     SKSEMenuFramework::AddSectionItem("Settings", RenderSettings);
     SKSEMenuFramework::AddSectionItem("Status", RenderStatus);
     SKSEMenuFramework::AddSectionItem("Inspect", RenderInspect);
+	SKSEMenuFramework::AddSectionItem("Update Queue", RenderUpdateQ);
+	SKSEMenuFramework::AddSectionItem("Stages", RenderStages);
     SKSEMenuFramework::AddSectionItem("Log", RenderLog);
     M = manager;
-};
+}
+void UI::ExcludeList()
+{
+    ImGui::Text("");
+    ImGui::Text("Exclusions per Module:");
+
+    for (const auto& [qform, excludes] : Settings::exclude_list) {
+        if (ImGui::CollapsingHeader(qform.c_str())) {
+            if (ImGui::BeginTable(("#exclude_"+qform).c_str(), 1, table_flags)) {
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+				for (const auto& exclude : excludes) {
+					ImGui::Text(exclude.c_str());
+				}
+
+                ImGui::EndTable();
+            }
+        }
+    }
+}
+void UI::IniSettingToggle(bool& setting, const std::string& setting_name, const std::string& section_name, const char* desc)
+{
+    const bool previous_state = setting;
+    ImGui::Checkbox(setting_name.c_str(), &setting);
+    if (Settings::disable_warnings != previous_state) {
+        // save to INI
+        Settings::INI_settings[section_name][setting_name] = setting;
+        CSimpleIniA ini;
+        ini.SetUnicode();
+        ini.LoadFile(Settings::INI_path);
+        ini.SetBoolValue(section_name.c_str(), setting_name.c_str(), setting);
+        ini.SaveFile(Settings::INI_path);
+    }
+    ImGui::SameLine();
+    if (desc) HelpMarker(desc);
+}
+void UI::DrawFilter1()
+{   
+    if (filter->Draw("Location filter",200)) {
+        if (!filter->PassFilter(item_current.c_str())){
+		    for (const auto& key : locations | std::views::keys) {
+                if (filter->PassFilter(key.c_str())) {
+                    item_current = key;
+					UpdateSubItem();
+                    break;
+                }
+            }
+        }
+    }
+}
+void UI::DrawFilter2()
+{   
+	if (filter2->Draw("Item filter",200)) {
+		if (!filter2->PassFilter(sub_item_current.c_str())) UpdateSubItem();
+	}
+}
+bool UI::DrawFilterModule()
+{
+	ImGui::Text("Module Filter:");
+	ImGui::SameLine();
+    ImGui::SetNextItemWidth(180);
+	if (ImGui::BeginCombo("##combo 3", filter_module.c_str())) {
+		if (ImGui::Selectable("None", filter_module == "None")) {
+			filter_module = "None";
+		}
+		for (const auto& [module_name, module_enabled] : Settings::INI_settings["Modules"]) {
+			if (!module_enabled) continue;
+			if (ImGui::Selectable(module_name.c_str(), filter_module == module_name)) {
+				filter_module = module_name;
+			}
+		}
+		ImGui::EndCombo();
+		return true;
+	}
+	return false;
+}
+void UI::UpdateSubItem()
+{
+    for (const auto& key2 : locations[item_current] | std::views::keys) {
+		if (filter2->PassFilter(key2.c_str())) {
+			sub_item_current = key2;
+			break;
+		}
+	}
+}
+void UI::UpdateLocationMap(const std::vector<Source>& sources)
+{
+    locations.clear();
+
+    for (const auto& source : sources) {
+        for (const auto& [location, instances] : source.data) {
+            const auto* locationReference = RE::TESForm::LookupByID<RE::TESObjectREFR>(location);
+            std::string locationName_temp;
+            if (locationReference) {
+				locationName_temp = locationReference->GetName();
+                if (locationReference->HasContainer()) locationName_temp += std::format(" ({:x})", location);
+			}
+			else {
+				locationName_temp = std::format("{:x}", location);
+			}
+            const char* locationName = locationName_temp.c_str();
+            for (auto& stageInstance : instances) {
+                const auto* delayerForm = RE::TESForm::LookupByID(stageInstance.GetDelayerFormID());
+                auto delayer_name = delayerForm ? delayerForm->GetName() : std::format("{:x}", stageInstance.GetDelayerFormID());
+                if (delayer_name == "0") delayer_name = "None";
+                int max_stage_no = 0;
+                while (source.IsStageNo(max_stage_no+1)) max_stage_no++;
+                    
+                const auto temp_stage_no = std::make_pair(stageInstance.no, max_stage_no);
+                auto temp_stagename = source.GetStageName(stageInstance.no);
+                temp_stagename = temp_stagename.empty() ? "" : std::format("({})", temp_stagename);
+                Instance instance(
+                    temp_stage_no, 
+                    temp_stagename,
+                    stageInstance.count,
+                    stageInstance.start_time,
+                    source.GetStageDuration(stageInstance.no),
+                    stageInstance.GetDelayMagnitude(),
+                    delayer_name,
+                    stageInstance.xtra.is_fake,
+                    stageInstance.xtra.is_transforming,
+                    stageInstance.xtra.is_decayed
+                );
+
+                const auto item = RE::TESForm::LookupByID(source.formid);
+                locations[std::string(locationName) + "##location"][(item ? item->GetName() : source.editorid)+ "##item"]
+                    .push_back(
+                    instance);
+            }
+        }
+    }
+
+    if (const auto current = locations.find(item_current); current == locations.end()){
+        item_current = "##current";
+        sub_item_current = "##item"; 
+    } else if (const auto item = current->second; item.find(sub_item_current) == item.end()) {
+        sub_item_current = "##item";
+    }
+}
+
+void UI::UpdateStages(const std::vector<Source>& sources)
+{
+    mcp_sources.clear();
+
+    for (const auto& source : sources) {
+        if (!source.IsHealthy()) continue;
+        StageNo max_stage_no = 0;
+		std::set<Stage> temp_stages;
+		while (source.IsStageNo(max_stage_no)) {
+            if (const auto* stage = source.GetStageSafe(max_stage_no)) {
+				const auto* temp_form = RE::TESForm::LookupByID(stage->formid);
+				if (!temp_form) continue;
+                const GameItem item = {temp_form->GetName(),stage->formid};
+				temp_stages.insert(Stage(item, stage->name, stage->duration, source.IsFakeStage(max_stage_no), stage->crafting_allowed,max_stage_no));
+			}
+			max_stage_no++;
+		}
+		const auto& stage = source.GetDecayedStage();
+        if (const auto* temp_form = RE::TESForm::LookupByID(stage.formid)) {
+			const GameItem item = { temp_form->GetName(),stage.formid };
+			temp_stages.insert(Stage(item, "Final", 0.f, source.IsFakeStage(max_stage_no), stage.crafting_allowed, max_stage_no));
+		}
+
+        std::set<GameItem> transformers_;
+		std::map<FormID,GameItem> transformer_enditems_;
+		std::map<FormID,Duration> transform_durations_;
+		for (const auto& [fst, snd] : source.defaultsettings->transformers) {
+			auto temp_formid = fst;
+            const auto temp_form = RE::TESForm::LookupByID(temp_formid);
+            const auto temp_name = temp_form ? temp_form->GetName() : std::format("{:x}", temp_formid);
+			transformers_.insert(GameItem{ temp_name,temp_formid });
+			const auto temp_formid2 = std::get<0>(snd);
+			const auto temp_form2 = RE::TESForm::LookupByID(temp_formid2);
+			const auto temp_name2 = temp_form2 ? temp_form2->GetName() : std::format("{:x}", temp_formid2);
+			transformer_enditems_[temp_formid] = GameItem{ temp_name2,temp_formid2 };
+			transform_durations_[temp_formid] = std::get<1>(snd);
+		}
+		std::set<GameItem> time_modulators_;
+		std::map<FormID,float> time_modulator_multipliers_;
+		for (const auto& [fst, snd] : source.defaultsettings->delayers) {
+			auto temp_formid = fst;
+			const auto temp_form = RE::TESForm::LookupByID(temp_formid);
+			const auto temp_name = temp_form ? temp_form->GetName() : std::format("{:x}", temp_formid);
+			time_modulators_.insert(GameItem{ temp_name,temp_formid });
+			time_modulator_multipliers_[temp_formid] = snd;
+		}
+
+		const auto qform_type = Settings::GetQFormType(source.formid);
+		mcp_sources.push_back(MCPSource{ temp_stages,transformers_,transformer_enditems_,transform_durations_,time_modulators_,time_modulator_multipliers_,qform_type});
+	}
+}
+
+void UI::RefreshButton()
+{
+    const auto& sources = M->GetSources();
+
+    FontAwesome::PushSolid();
+
+    if (ImGui::Button((FontAwesome::UnicodeToUtf8(0xf021) + " Refresh").c_str()) || last_generated.empty()) {
+
+        last_generated = std::format("{} (in-game hours)", RE::Calendar::GetSingleton()->GetHoursPassed());
+
+        UpdateLocationMap(sources);
+		UpdateStages(sources);
+
+		update_q.clear();
+        for (const auto& [refid, stop_time] : M->GetUpdateQueue()) {
+			if (const auto ref = RE::TESForm::LookupByID<RE::TESObjectREFR>(refid)) {
+				std::string temp_name = std::format("{} ({:x})", ref->GetName(), refid);
+				update_q[refid] = std::make_pair(temp_name, stop_time);
+			}
+            else {
+				update_q[refid] = std::make_pair(std::format("{:x}", refid), stop_time);
+		    }
+        }
+    }
+    FontAwesome::Pop();
+
+    ImGui::SameLine();
+    ImGui::Text(("Last Generated: " + last_generated).c_str());
+}
