@@ -224,8 +224,7 @@ void __stdcall UI::RenderStages()
     }
 
 	ImGui::SameLine();
-	const auto module_filter_old = filter_module;
-	if (DrawFilterModule() && module_filter_old != filter_module) {
+    if (const auto& module_filter_old = filter_module; DrawFilterModule() && module_filter_old != filter_module) {
         for (size_t i = 0; i < mcp_sources.size(); ++i) {
 			if (filter_module != "None" && mcp_sources[i].type != filter_module) continue;
 			selected_source_index = static_cast<int>(i);

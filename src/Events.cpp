@@ -28,7 +28,6 @@ void OurEventSink::HandleWO(RE::TESObjectREFR* ref) const
 
 void OurEventSink::HandleWOsInCell() const
 {
-    if (!Settings::world_objects_evolve) return;
 	logger::trace("HandleWOsInCell: Calling Update.");
 	auto* player = RE::PlayerCharacter::GetSingleton();
     //M->Update(player);

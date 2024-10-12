@@ -42,7 +42,7 @@ void Manager::UpdateLoop()
     Start();
 }
 
-void Manager::QueueWOUpdate(RefID refid, const float stop_t)
+void Manager::QueueWOUpdate(const RefID refid, const float stop_t)
 {
     if (!Settings::world_objects_evolve) return;
     _ref_stops_[refid] = stop_t;
