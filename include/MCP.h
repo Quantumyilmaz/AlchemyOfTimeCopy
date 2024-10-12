@@ -6,6 +6,7 @@
 static void HelpMarker(const char* desc);
 
 namespace UI {
+
     struct Instance {
         std::pair<StageNo,StageNo> stage_number;
         std::string stage_name;
@@ -18,6 +19,46 @@ namespace UI {
         bool is_transforming;
         bool is_decayed;
     };
+
+    struct GameItem {
+        std::string name;
+        uint32_t formid;
+
+		bool operator<(const GameItem& other) const {
+			return formid < other.formid;
+		}
+    };
+
+	struct Stage {
+		GameItem item;
+        StageName name;
+		Duration duration;
+		bool is_fake;
+        bool crafting_allowed;
+		//unsigned int n_instances;
+
+		bool operator<(const Stage& other) const {
+			return no < other.no;
+		}
+
+		// constructor
+		Stage(GameItem item_, StageName name_, Duration duration_, bool is_fake_, bool crafting_allowed_, unsigned int no_)
+			: item(item_), name(name_), duration(duration_), is_fake(is_fake_), crafting_allowed(crafting_allowed_), no(no_) {}
+
+	private:
+        unsigned int no = 0;
+	};
+
+    struct MCPSource {
+		std::set<Stage> stages;
+		std::set<GameItem> transformers;
+		std::map<FormID,GameItem> transformer_enditems;
+		std::map<FormID,Duration> transform_durations;
+		std::set<GameItem> time_modulators;
+		std::map<FormID,float> time_modulator_multipliers;
+        std::string type;
+    };
+
     using InstanceMap = std::map<std::string, std::vector<Instance>>;
     using LocationMap = std::map<std::string, InstanceMap>;
 
@@ -25,20 +66,37 @@ namespace UI {
     inline std::vector<std::string> logLines;
 
     inline LocationMap locations;
+	inline std::map<RefID, std::pair<std::string, float>> update_q;
+	inline std::vector<MCPSource> mcp_sources;
 
-    inline std::string last_generated = "";
+    inline std::string last_generated;
     inline std::string item_current = "##current";
-    inline std::string sub_item_current = "##item"; 
+    inline std::string sub_item_current = "##item";
+    inline std::string source_current = "##source"; 
     inline bool is_list_box_focused = false;
     inline ImGuiTextFilter* filter;
     inline ImGuiTextFilter* filter2;
-    inline ImGuiTableFlags table_flags = ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable;
+	inline std::string filter_module = "None";
+	inline int selected_source_index = 0;
+    inline ImGuiTableFlags table_flags = ImGuiTableFlags_Resizable | ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg;
 
     inline Manager* M;
     void __stdcall RenderSettings();
     void __stdcall RenderStatus();
     void __stdcall RenderInspect();
+    void __stdcall RenderUpdateQ();
+    void __stdcall RenderStages();
     void __stdcall RenderLog();
     void Register(Manager* manager);
+
+    void ExcludeList();
+	void IniSettingToggle(bool& setting, const std::string& setting_name, const std::string&section_name, const char* desc);
+	void DrawFilter1();
+	void DrawFilter2();
+	bool DrawFilterModule();
+    void UpdateSubItem();
+    void UpdateLocationMap(const std::vector<Source>& sources);
+	void UpdateStages(const std::vector<Source>& sources);
+    void RefreshButton();
 
 };

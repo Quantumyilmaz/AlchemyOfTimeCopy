@@ -14,9 +14,9 @@ struct StageEffect {
     StageEffect() : beffect(0), magnitude(0), duration(0) {}
     StageEffect(FormID be, float mag, DurationMGEFF dur) : beffect(be), magnitude(mag), duration(dur) {}
 
-    [[nodiscard]] inline const bool IsNull() const { return beffect == 0; }
-    [[nodiscard]] inline const bool HasMagnitude() const { return magnitude != 0; }
-    [[nodiscard]] inline const bool HasDuration() const { return duration != 0; }
+    [[nodiscard]] bool IsNull() const { return beffect == 0; }
+    [[nodiscard]] bool HasMagnitude() const { return magnitude != 0; }
+    [[nodiscard]] bool HasDuration() const { return duration != 0; }
 };
 
 
@@ -34,8 +34,12 @@ struct Stage {
     Stage(FormID f, Duration d, StageNo s, StageName n, bool ca,std::vector<StageEffect> e)
         : formid(f), duration(d), no(s), name(n), crafting_allowed(ca) ,mgeffect(e) {
         if (!formid) logger::critical("FormID is null");
-        else logger::info("Stage: FormID {}, Duration {}, StageNo {}, Name {}", formid, duration, no, name);
+        else logger::trace("Stage: FormID {}, Duration {}, StageNo {}, Name {}", formid, duration, no, name);
         if (e.empty()) mgeffect.clear();
+        if (duration <= 0) {
+			logger::critical("Duration is 0 or negative");
+			duration = 0.1f;
+        }
     }
 
     bool operator<(const Stage& other) const {
@@ -50,7 +54,7 @@ struct Stage {
 
     RE::TESBoundObject* GetBound() const { return GetFormByID<RE::TESBoundObject>(formid); };
 
-    [[nodiscard]] const bool CheckIntegrity() const;
+    [[nodiscard]] bool CheckIntegrity() const;
 
     inline const char* GetExtraText() const { return GetBound()->GetName(); }
 
@@ -85,13 +89,8 @@ struct StageInstance {
     Types::FormEditorIDX xtra;
 
     //StageInstance() : start_time(0), no(0), count(0), location(0) {}
-    StageInstance(const float st, const StageNo n, const Count c
-        //, RefID l
-        //,std::string ei
-    )
+    StageInstance(const float st, const StageNo n, const Count c)
         : start_time(st), no(n), count(c)
-        //, location(l)
-        //,editorid(ei) 
     {
         _elapsed = 0;
         _delay_start = start_time;
@@ -105,37 +104,42 @@ struct StageInstance {
 
     // times are very close (abs diff less than 0.015h = 0.9min)
     // assumes that they are in the same inventory
-	[[nodiscard]] bool AlmostSameExceptCount(StageInstance& other,const float curr_time) const;
+	[[nodiscard]] bool AlmostSameExceptCount(StageInstance& other, float curr_time) const;
 
     StageInstance& operator=(const StageInstance& other);
 
     inline RE::TESBoundObject* GetBound() const { return GetFormByID<RE::TESBoundObject>(xtra.form_id); };
-        
-	const float GetElapsed(const float curr_time) const;
 
-    const float GetDelaySlope() const;
+    float GetElapsed(float curr_time) const;
 
-    void SetNewStart(const float curr_time, const float overshot);
+    float GetDelaySlope() const;
 
-    void SetDelay(const float time,const float delay,const FormID formid);
+    void SetNewStart(float curr_time, float overshot);
 
-    void SetTransform(const float time, const FormID formid);
+    void SetDelay(float time, float delay, FormID formid);
 
-    inline const float GetTransformElapsed(const float curr_time) const { return GetElapsed(curr_time) - _elapsed; }
+    void SetTransform(float time, FormID formid);
 
-    void RemoveTransform(const float curr_time);
+    float GetTransformElapsed(const float curr_time) const { return GetElapsed(curr_time) - _elapsed; }
+
+    void RemoveTransform(float curr_time);
 
     // use only for WO (e.g. HandleDrop)
-    void RemoveTimeMod(const float time);
+    void RemoveTimeMod(float time);
 
-    inline const float GetDelayMagnitude() const { return GetDelaySlope(); }
+    float GetDelayMagnitude() const { return GetDelaySlope(); }
 
-    inline const FormID GetDelayerFormID() const { return _delay_formid; }
+    FormID GetDelayerFormID() const { return _delay_formid; }
 
-    inline const float GetHittingTime(float schranke) const{
+    float GetHittingTime(const float schranke) const {
         // _elapsed + dt*_delay_mag = schranke
         return _delay_start + (schranke - _elapsed) / (GetDelaySlope() + std::numeric_limits<float>::epsilon());
     };
+
+    float GetTransformHittingTime(const float schranke) const{
+        if (!xtra.is_transforming) return 0;
+		return GetHittingTime(schranke+_elapsed);
+    }
 
     StageInstancePlain GetPlain() const;
 
@@ -178,9 +182,9 @@ struct DefaultSettings {
     std::map<FormID,float> delayers;
     std::map<FormID, std::tuple<FormID, Duration, std::vector<StageNo>>> transformers;
 
-    [[nodiscard]] inline const bool IsHealthy() const { return !init_failed; }
+    [[nodiscard]] bool IsHealthy() const { return !init_failed; }
 
-    [[nodiscard]] const bool CheckIntegrity();
+    [[nodiscard]] bool CheckIntegrity();
 
 private:
     bool init_failed = false;

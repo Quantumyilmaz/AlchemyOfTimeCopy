@@ -27,14 +27,12 @@ void OnMessage(SKSE::MessagingInterface::Message* message) {
         if (!M) return;
         
         // 4) Register event sinks
-        bool wo_e = Settings::INI_settings["Other Settings"]["WorldObjectsEvolve"];
-        eventSink = OurEventSink::GetSingleton(wo_e,M);
+        eventSink = OurEventSink::GetSingleton(M);
         auto* eventSourceHolder = RE::ScriptEventSourceHolder::GetSingleton();
         eventSourceHolder->AddEventSink<RE::TESEquipEvent>(eventSink);
         eventSourceHolder->AddEventSink<RE::TESActivateEvent>(eventSink);
         eventSourceHolder->AddEventSink<RE::TESContainerChangedEvent>(eventSink);
         eventSourceHolder->AddEventSink<RE::TESFurnitureEvent>(eventSink);
-        RE::UI::GetSingleton()->AddEventSink<RE::MenuOpenCloseEvent>(eventSink);
         eventSourceHolder->AddEventSink<RE::TESSleepStopEvent>(eventSink);
         eventSourceHolder->AddEventSink<RE::TESWaitStopEvent>(eventSink);
         eventSourceHolder->AddEventSink<RE::TESFormDeleteEvent>(eventSink);
@@ -45,8 +43,15 @@ void OnMessage(SKSE::MessagingInterface::Message* message) {
         // 5) Start MCP
         UI::Register(M);
         logger::info("MCP registered.");
+
+		// 6) install hooks
+		Hooks::Install(M);
+		logger::info("Hooks installed.");
     }
     if (message->type == SKSE::MessagingInterface::kPostLoadGame) {
+		logger::info("PostLoadGame.");
+        if (!M || M->isUninstalled.load()) return;
+		M->Update(RE::PlayerCharacter::GetSingleton());
         if (!eventSink) return;
         eventSink->HandleWOsInCell();
     }
@@ -85,7 +90,6 @@ void LoadCallback(SKSE::SerializationInterface* serializationInterface) {
     while (serializationInterface->GetNextRecordInfo(type, version, length)) {
         auto temp = DecodeTypeCode(type);
 
-
         if (version == Settings::kSerializationVersion-1){
             logger::info("Older version of Alchemy of Time detected.");
             /*Utilities::MsgBoxesNotifs::InGame::CustomMsg("You are using an older"
@@ -101,11 +105,13 @@ void LoadCallback(SKSE::SerializationInterface* serializationInterface) {
         }
         switch (type) {
             case Settings::kDataKey: {
+				logger::info("Manager: Loading Data.");
                 logger::trace("Loading Record: {} - Version: {} - Length: {}", temp, version, length);
                 if (!M->Load(serializationInterface)) logger::critical("Failed to Load Data for Manager");
                 else cosave_found++;
             } break;
             case Settings::kDFDataKey: {
+				logger::info("DFT: Loading Data.");
 				logger::trace("Loading Record: {} - Version: {} - Length: {}", temp, version, length);
 				if (!DFT->Load(serializationInterface)) logger::critical("Failed to Load Data for DFT");
 				else cosave_found++;
@@ -117,7 +123,6 @@ void LoadCallback(SKSE::SerializationInterface* serializationInterface) {
     }
 
     if (cosave_found==2) {
-        logger::info("Receiving Data.");
 		DFT->ReceiveData();
         M->ReceiveData();
         logger::info("Data loaded from skse co-save.");

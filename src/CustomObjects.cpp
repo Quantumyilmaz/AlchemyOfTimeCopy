@@ -37,14 +37,12 @@ StageInstance& StageInstance::operator=(const StageInstance& other)
     return *this;
 }
 
-const float StageInstance::GetElapsed(const float curr_time) const
-{
+float StageInstance::GetElapsed(const float curr_time) const {
     if (_delay_mag == 0) return _elapsed;
     return (curr_time - _delay_start) * GetDelaySlope() + _elapsed;
 }
 
-const float StageInstance::GetDelaySlope() const
-{
+float StageInstance::GetDelaySlope() const {
     const auto delay_magnitude = std::min(std::max(-1000.f, _delay_mag), 1000.f);
     //if (std::abs(delay_magnitude) < 0.0001f) {
     //    // If the delay slope is too close to 0, return a small non-zero value
@@ -131,8 +129,7 @@ void StageInstance::SetDelay(const StageInstancePlain& plain)
 	_delay_formid = plain._delay_formid;
 }
 
-const bool Stage::CheckIntegrity() const
-{
+bool Stage::CheckIntegrity() const {
     if (!formid || !GetBound()) {
 		logger::error("FormID or bound is null");
 		return false;
@@ -145,8 +142,7 @@ const bool Stage::CheckIntegrity() const
 }
 
 
-const bool DefaultSettings::CheckIntegrity()
-{
+bool DefaultSettings::CheckIntegrity() {
     if (items.empty() || durations.empty() || stage_names.empty() || effects.empty() || numbers.empty()) {
         logger::error("One of the maps is empty.");
         // list sizes of each

@@ -56,6 +56,7 @@ protected:
 
 
 class SaveLoadData : public BaseData<SaveDataLHS,SaveDataRHS> {
+
 public:
 
     [[nodiscard]] bool Save(SKSE::SerializationInterface* serializationInterface) override {
@@ -173,7 +174,7 @@ public:
 		    }
 
             m_Data[lhs] = rhs;
-            logger::info("Loaded data for formid {}, editorid {}, and refid {}", formid, editorid,refid);
+            logger::trace("Loaded data for formid {}, editorid {}, and refid {}", formid, editorid,refid);
         }
              
         return true;
@@ -282,7 +283,7 @@ public:
             }
 
             m_Data[lhs] = rhs;
-            logger::info("Loaded data for formid {}, editorid {}", formid, editorid);
+            logger::trace("Loaded data for formid {}, editorid {}", formid, editorid);
         }
 
         return true;

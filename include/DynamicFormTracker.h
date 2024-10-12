@@ -562,7 +562,7 @@ public:
 
     void ReceiveData() {
         // std::lock_guard<std::mutex> lock(mutex);
-		logger::info("--------Receiving data (DFT) ---------");
+		logger::info("-------- Receiving data (DFT) ---------");
 
         int n_fakes = 0;
         int n_act_effs = 0;

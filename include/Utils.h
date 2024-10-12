@@ -1,6 +1,7 @@
 #pragma once
 #include <windows.h>
 #include <atomic>
+#include <shared_mutex>
 #include "ClibUtil/editorID.hpp"
 
 const auto mod_name = static_cast<std::string>(SKSE::PluginDeclaration::GetSingleton()->GetName());
@@ -29,11 +30,9 @@ inline bool isValidHexWithLength7or8(const char* input);
 template <class T = RE::TESForm>
 static T* GetFormByID(const RE::FormID id, const std::string& editor_id="") {
     if (!editor_id.empty()) {
-        auto* form = RE::TESForm::LookupByEditorID<T>(editor_id);
-        if (form) return form;
+        if (auto* form = RE::TESForm::LookupByEditorID<T>(editor_id)) return form;
     }
-    T* form = RE::TESForm::LookupByID<T>(id);
-    if (form) return form;
+    if (T* form = RE::TESForm::LookupByID<T>(id)) return form;
     return nullptr;
 };
 
@@ -41,32 +40,24 @@ const std::string GetEditorID(const FormID a_formid);
 
 FormID GetFormEditorIDFromString(const std::string formEditorId);
 
-inline bool FormIsOfType(RE::TESForm* form, RE::FormType type);
+inline bool FormIsOfType(const RE::TESForm* form, RE::FormType type);
 
-bool IsFoodItem(RE::TESForm* form);
+bool IsFoodItem(const RE::TESForm* form);
 
-inline bool IsFoodItem(const FormID formid) { return IsFoodItem(GetFormByID(formid)); }
+bool IsPoisonItem(const RE::TESForm* form);
 
-bool IsPoisonItem(RE::TESForm* form);
-
-inline bool FormIsOfType(const FormID formid, RE::FormType type) { return FormIsOfType(GetFormByID(formid), type); }
-
-inline bool IsPoisonItem(const FormID formid) { return IsPoisonItem(GetFormByID(formid)); }
-
-inline bool IsMedicineItem(RE::TESForm* form);
-
-inline bool IsMedicineItem(const FormID formid) { return IsPoisonItem(GetFormByID(formid)); }
+bool IsMedicineItem(const RE::TESForm* form);
 
 void OverrideMGEFFs(RE::BSTArray<RE::Effect*>& effect_array, std::vector<FormID> new_effects,
                             std::vector<uint32_t> durations, std::vector<float> magnitudes);
 
-inline const bool IsDynamicFormID(const FormID a_formID) { return a_formID >= 0xFF000000; }
+inline bool IsDynamicFormID(const FormID a_formID) { return a_formID >= 0xFF000000; }
 
-void FavoriteItem(RE::TESBoundObject* item, RE::TESObjectREFR* inventory_owner);
+void FavoriteItem(const RE::TESBoundObject* item, RE::TESObjectREFR* inventory_owner);
 
-[[nodiscard]] const bool IsFavorited(RE::TESBoundObject* item, RE::TESObjectREFR* inventory_owner);
+[[nodiscard]] bool IsFavorited(RE::TESBoundObject* item, RE::TESObjectREFR* inventory_owner);
 
-[[nodiscard]] inline const bool IsFavorited(RE::FormID formid, RE::FormID refid) {
+[[nodiscard]] inline bool IsFavorited(RE::FormID formid, RE::FormID refid) {
     return IsFavorited(GetFormByID<RE::TESBoundObject>(formid),GetFormByID<RE::TESObjectREFR>(refid));
 }
 
@@ -74,17 +65,17 @@ inline void FavoriteItem(const FormID formid, const FormID refid) {
 	FavoriteItem(GetFormByID<RE::TESBoundObject>(formid), GetFormByID<RE::TESObjectREFR>(refid));
 }
 
-[[nodiscard]] inline const bool IsPlayerFavorited(RE::TESBoundObject* item) {
+[[nodiscard]] inline bool IsPlayerFavorited(RE::TESBoundObject* item) {
     return IsFavorited(item, RE::PlayerCharacter::GetSingleton()->AsReference());
 }
 
-void EquipItem(RE::TESBoundObject* item, bool unequip = false);
+void EquipItem(const RE::TESBoundObject* item, bool unequip = false);
 
 inline void EquipItem(const FormID formid, bool unequip = false) {
 	EquipItem(GetFormByID<RE::TESBoundObject>(formid), unequip);
 }
 
-[[nodiscard]] const bool IsEquipped(RE::TESBoundObject* item);
+[[nodiscard]] bool IsEquipped(RE::TESBoundObject* item);
 
 [[nodiscard]] inline const bool IsEquipped(const FormID formid) {
 	return IsEquipped(GetFormByID<RE::TESBoundObject>(formid));
@@ -141,6 +132,10 @@ namespace Vector {
 };
 
 namespace Math {
+
+    float Round(float value, int n);
+    float Ceil(float value, int n);
+
     namespace LinAlg {
         namespace R3 {
             void rotateX(RE::NiPoint3& v, float angle);
@@ -204,37 +199,37 @@ namespace MsgBoxesNotifs {
 namespace xData {
 
     namespace Copy {
-        void CopyEnchantment(RE::ExtraEnchantment* from, RE::ExtraEnchantment* to);
+        void CopyEnchantment(const RE::ExtraEnchantment* from, RE::ExtraEnchantment* to);
             
-        void CopyHealth(RE::ExtraHealth* from, RE::ExtraHealth* to);
+        void CopyHealth(const RE::ExtraHealth* from, RE::ExtraHealth* to);
 
-        void CopyRank(RE::ExtraRank* from, RE::ExtraRank* to);
+        void CopyRank(const RE::ExtraRank* from, RE::ExtraRank* to);
 
-        void CopyTimeLeft(RE::ExtraTimeLeft* from, RE::ExtraTimeLeft* to);
+        void CopyTimeLeft(const RE::ExtraTimeLeft* from, RE::ExtraTimeLeft* to);
 
-        void CopyCharge(RE::ExtraCharge* from, RE::ExtraCharge* to);
+        void CopyCharge(const RE::ExtraCharge* from, RE::ExtraCharge* to);
 
-        void CopyScale(RE::ExtraScale* from, RE::ExtraScale* to);
+        void CopyScale(const RE::ExtraScale* from, RE::ExtraScale* to);
 
-        void CopyUniqueID(RE::ExtraUniqueID* from, RE::ExtraUniqueID* to);
+        void CopyUniqueID(const RE::ExtraUniqueID* from, RE::ExtraUniqueID* to);
 
-        void CopyPoison(RE::ExtraPoison* from, RE::ExtraPoison* to);
+        void CopyPoison(const RE::ExtraPoison* from, RE::ExtraPoison* to);
 
-        void CopyObjectHealth(RE::ExtraObjectHealth* from, RE::ExtraObjectHealth* to);
+        void CopyObjectHealth(const RE::ExtraObjectHealth* from, RE::ExtraObjectHealth* to);
 
-        void CopyLight(RE::ExtraLight* from, RE::ExtraLight* to);
+        void CopyLight(const RE::ExtraLight* from, RE::ExtraLight* to);
 
-        void CopyRadius(RE::ExtraRadius* from, RE::ExtraRadius* to);
+        void CopyRadius(const RE::ExtraRadius* from, RE::ExtraRadius* to);
 
-        void CopyHorse(RE::ExtraHorse* from, RE::ExtraHorse* to);
+        void CopyHorse(const RE::ExtraHorse* from, RE::ExtraHorse* to);
 
-        void CopyHotkey(RE::ExtraHotkey* from, RE::ExtraHotkey* to);
+        void CopyHotkey(const RE::ExtraHotkey* from, RE::ExtraHotkey* to);
 
-        void CopyTextDisplayData(RE::ExtraTextDisplayData* from, RE::ExtraTextDisplayData* to);
+        void CopyTextDisplayData(const RE::ExtraTextDisplayData* from, RE::ExtraTextDisplayData* to);
 
-        void CopySoul(RE::ExtraSoul* from, RE::ExtraSoul* to);
+        void CopySoul(const RE::ExtraSoul* from, RE::ExtraSoul* to);
 
-        void CopyOwnership(RE::ExtraOwnership* from, RE::ExtraOwnership* to);
+        void CopyOwnership(const RE::ExtraOwnership* from, RE::ExtraOwnership* to);
     };
 
     template <typename T>
@@ -295,26 +290,25 @@ namespace xData {
         };
     }
 
-    [[nodiscard]] const bool UpdateExtras(RE::ExtraDataList* copy_from, RE::ExtraDataList* copy_to);
+    [[nodiscard]] bool UpdateExtras(RE::ExtraDataList* copy_from, RE::ExtraDataList* copy_to);
 };
 
 namespace WorldObject {
-
-	const int16_t GetObjectCount(RE::TESObjectREFR* ref);
+    int16_t GetObjectCount(RE::TESObjectREFR* ref);
     void SetObjectCount(RE::TESObjectREFR* ref, Count count);
 
-    RE::TESObjectREFR* DropObjectIntoTheWorld(RE::TESBoundObject* obj, Count count, bool owned = true);
+    RE::TESObjectREFR* DropObjectIntoTheWorld(RE::TESBoundObject* obj, Count count, bool player_owned=true);
 
-    void SwapObjects(RE::TESObjectREFR* a_from, RE::TESBoundObject* a_to, const bool apply_havok=true);
+    void SwapObjects(RE::TESObjectREFR* a_from, RE::TESBoundObject* a_to, bool apply_havok=true);
 
-	float GetDistanceFromPlayer(RE::TESObjectREFR* ref);
-    [[nodiscard]] const bool PlayerPickUpObject(RE::TESObjectREFR* item, Count count, const unsigned int max_try = 3);
+	float GetDistanceFromPlayer(const RE::TESObjectREFR* ref);
+    [[nodiscard]] bool PlayerPickUpObject(RE::TESObjectREFR* item, Count count, unsigned int max_try = 3);
 
-    const RefID TryToGetRefIDFromHandle(RE::ObjectRefHandle handle);
+    RefID TryToGetRefIDFromHandle(const RE::ObjectRefHandle& handle);
 
-	RE::TESObjectREFR* TryToGetRefFromHandle(RE::ObjectRefHandle& handle, unsigned int max_try = 2);
+	RE::TESObjectREFR* TryToGetRefFromHandle(RE::ObjectRefHandle& handle, unsigned int max_try = 1);
 
-	RE::TESObjectREFR* TryToGetRefInCell(const FormID baseid, const Count count, float radius = 180);
+	RE::TESObjectREFR* TryToGetRefInCell(FormID baseid, Count count, float radius = 180);
 
     template <typename T>
     void ForEachRefInCell(T func) {
@@ -330,15 +324,16 @@ namespace WorldObject {
 			func(ref.get());
 		}
     }
+
 };
 
 namespace Inventory {
+    bool EntryHasXData(const RE::InventoryEntryData* entry);
 
-    const bool EntryHasXData(RE::InventoryEntryData* entry);
+    bool HasItemEntry(RE::TESBoundObject* item, RE::TESObjectREFR* inventory_owner,
+                      bool nonzero_entry_check = false);
 
-    const bool HasItemEntry(RE::TESBoundObject* item, RE::TESObjectREFR* inventory_owner, bool nonzero_entry_check=false);
-
-    inline const std::int32_t GetItemCount(RE::TESBoundObject* item, RE::TESObjectREFR* inventory_owner);
+    inline std::int32_t GetItemCount(RE::TESBoundObject* item, RE::TESObjectREFR* inventory_owner);
 
     bool IsQuestItem(const FormID formid, RE::TESObjectREFR* inv_owner);
 };
@@ -350,66 +345,11 @@ namespace Menu {
     RE::TESObjectREFR* GetVendorChestFromMenu();
 
     template <typename T>
-    void RefreshItemList(RE::TESObjectREFR* inventory_owner) {
-        if (!inventory_owner) {
-            logger::error("Inventory owner is null.");
-            return;
-        }
-        if (T::MENU_NAME != RE::BarterMenu::MENU_NAME && T::MENU_NAME != RE::ContainerMenu::MENU_NAME &&
-            T::MENU_NAME != RE::InventoryMenu::MENU_NAME) {
-            logger::error("Menu type not supported: {}", T::MENU_NAME);
-			return;
-		}
-        auto ui = RE::UI::GetSingleton();
-        /*if (!ui->IsMenuOpen(T::MENU_NAME)){
-            logger::error("Menu is not open.");
-			return;
-        }*/
-                
-        std::map<FormID, Count> item_map;
-        auto inventory = inventory_owner->GetInventory();
-        for (auto& [item, entry] : inventory) {
-			item_map[item->GetFormID()] = entry.first;
-		}
-        auto inventory_menu = ui->GetMenu<T>();
-        if (inventory_menu) {
-            if (auto itemlist = inventory_menu->GetRuntimeData().itemList) {
-                logger::trace("Updating itemlist.");
-                for (auto* item : itemlist->items) {
-                    auto temp_entry = item->data.objDesc;
-                    if (!temp_entry) {
-                        logger::error("Item entry is null.");
-                        continue;
-                    }
-                    auto temp_obj = temp_entry->object;
-                    if (!temp_obj) {
-						logger::error("Item object is null.");
-						continue;
-					}
-                    item_map[temp_obj->GetFormID()] -= item->data.GetCount();
-                }
-            } else logger::info("Itemlist is null.");
-        } else logger::info("Inventory menu is null.");
-
-        for (auto& [formid, count] : item_map) {
-			if (count > 0) {
-				auto item = GetFormByID<RE::TESBoundObject>(formid);
-				if (!item) {
-					logger::error("Item is null.");
-					continue;
-				}
-                logger::trace("Sending inventory update message: {}", item->GetName());
-				RE::SendUIMessage::SendInventoryUpdateMessage(inventory_owner, item);
-			}
-		}
-    };
-
-    template <typename T>
     void UpdateItemList() {
         if (auto ui = RE::UI::GetSingleton(); ui->IsMenuOpen(T::MENU_NAME)) {
             if (auto inventory_menu = ui->GetMenu<T>()) {
                 if (auto itemlist = inventory_menu->GetRuntimeData().itemList) {
-                    logger::trace("Updating itemlist.");
+                    //logger::trace("Updating itemlist.");
                     itemlist->Update();
                 } else logger::info("Itemlist is null.");
             } else logger::info("Inventory menu is null.");

@@ -2,24 +2,21 @@
 #include "Data.h"
 #include "Ticker.h"
 
-class Manager : public Ticker, public SaveLoadData {
+class Manager final : public Ticker, public SaveLoadData {
 	RE::TESObjectREFR* player_ref = RE::PlayerCharacter::GetSingleton()->As<RE::TESObjectREFR>();
 	
-    // std::map<RefID,std::set<FormID>> external_favs;
-    
-    std::map<Types::FormFormID, std::pair<int, Count>>
-        handle_crafting_instances;  // formid1: source formid, formid2: stage formid
+    std::map<Types::FormFormID, std::pair<int, Count>> handle_crafting_instances;  // formid1: source formid, formid2: stage formid
     std::map<FormID, bool> faves_list;
     std::map<FormID, bool> equipped_list;
 
     std::map<RefID, std::vector<FormID>> locs_to_be_handled;  // onceki sessiondan kalan fake formlar
 
-    bool worldobjectsevolve = false;
     bool should_reset = false;
 
     // 0x0003eb42 damage health
 
-    std::mutex mutex;
+    //std::mutex mutex;
+    std::shared_mutex sharedMutex_;
 
     std::vector<Source> sources;
 
@@ -28,157 +25,114 @@ class Manager : public Ticker, public SaveLoadData {
     unsigned int _instance_limit = 200000;
 
     std::map<RefID, float> _ref_stops_;
+    std::set<RefID> queue_delete_;
     std::atomic<bool> listen_woupdate = true;
-    std::atomic<bool> update_is_busy = false;
-
-    std::vector<std::tuple<FormID, Count, RefID, Duration>> to_register_go;
 
     std::set<FormID> do_not_register;
 
-    void _WOUpdateLoop(const float curr_time);
+    void WoUpdateLoop(float curr_time, std::map<RefID, float> ref_stops_copy);
 
     void UpdateLoop();
 
     void QueueWOUpdate(RefID refid, float stop_t);
 
-    void RemoveFromWOUpdateQueue(RefID refid);
+    [[nodiscard]] unsigned int GetNInstances();
 
-    [[nodiscard]] const unsigned int GetNInstances();
-
-    [[nodiscard]] Source* _MakeSource(const FormID source_formid, DefaultSettings* settings);
+    [[nodiscard]] Source* MakeSource(FormID source_formid, DefaultSettings* settings);
 
     void CleanUpSourceData(Source* src);
 
-    [[nodiscard]] Source* GetSource(const FormID some_formid);
+    [[nodiscard]] Source* GetSource(FormID some_formid);
 
-    [[nodiscard]] Source* ForceGetSource(const FormID some_formid);
+    [[nodiscard]] Source* ForceGetSource(FormID some_formid);
 
-    [[nodiscard]] StageInstance* GetWOStageInstance(RefID wo_refid);
+    [[nodiscard]] StageInstance* GetWOStageInstance(const RE::TESObjectREFR* wo_ref);
 
-    [[nodiscard]] StageInstance* GetWOStageInstance(RE::TESObjectREFR* wo_ref);
+    static inline void ApplyStageInWorld_Fake(RE::TESObjectREFR* wo_ref, const char* xname);
 
-    [[nodiscard]] Source* GetWOSource(RefID wo_refid);
 
-    [[nodiscard]] Source* GetWOSource(RE::TESObjectREFR* wo_ref);
+    static void ApplyStageInWorld(RE::TESObjectREFR* wo_ref, const Stage& stage, RE::TESBoundObject* source_bound = nullptr);
 
-    inline void _ApplyStageInWorld_Fake(RE::TESObjectREFR* wo_ref, const char* xname);
+    static inline void ApplyEvolutionInInventoryX(RE::TESObjectREFR* inventory_owner, Count update_count, FormID old_item,
+                                                   FormID new_item);
 
-    inline void _ApplyStageInWorld_Custom(RE::TESObjectREFR* wo_ref, RE::TESBoundObject* stage_bound);
-
-    void ApplyStageInWorld(RE::TESObjectREFR* wo_ref, const Stage& stage, RE::TESBoundObject* source_bound = nullptr);
-
-    inline void _ApplyEvolutionInInventoryX(RE::TESObjectREFR* inventory_owner, Count update_count, FormID old_item,
-                                     FormID new_item);
-
-    inline void _ApplyEvolutionInInventory(RE::TESObjectREFR* inventory_owner, Count update_count, FormID old_item,
-                                    FormID new_item);
+    static inline void ApplyEvolutionInInventory_(RE::TESObjectREFR* inventory_owner, Count update_count, FormID old_item,
+                                                  FormID new_item);
 
     void ApplyEvolutionInInventory(std::string _qformtype_, RE::TESObjectREFR* inventory_owner, Count update_count,
                                    FormID old_item, FormID new_item);
 
-    inline const RE::ObjectRefHandle RemoveItemReverse(RE::TESObjectREFR* moveFrom, RE::TESObjectREFR* moveTo, FormID item_id,
-                                                Count count, RE::ITEM_REMOVE_REASON reason);
+    static inline void RemoveItem(RE::TESObjectREFR* moveFrom, FormID item_id, Count count);
 
-    void AddItem(RE::TESObjectREFR* addTo, RE::TESObjectREFR* addFrom, FormID item_id, Count count);
-
-    bool _UpdateStagesInSource(std::vector<RE::TESObjectREFR*> refs, Source& src, const float curr_time);
-
-    bool _UpdateStagesOfRef(RE::TESObjectREFR* ref, const float _time, bool is_inventory);
+    static void AddItem(RE::TESObjectREFR* addTo, RE::TESObjectREFR* addFrom, FormID item_id, Count count);
     
-    // only for time modulators which are also stages.
-    bool _UpdateTimeModulators(RE::TESObjectREFR* inventory_owner, const float curr_time);
-
-    void RaiseMngrErr(const std::string err_msg_ = "Error");
-
-    void InitFailed();
-
     void Init();
 
+    std::set<float> GetUpdateTimes(RE::TESObjectREFR* inventory_owner);
+    void UpdateInventory(RE::TESObjectREFR* ref, const float t);
+    void UpdateInventory(RE::TESObjectREFR* ref);
+    void UpdateWO(RE::TESObjectREFR* ref);
+	void SyncWithInventory(RE::TESObjectREFR* ref);
+    void UpdateRef(RE::TESObjectREFR* loc);
+
 public:
-    Manager(std::vector<Source>& data, std::chrono::milliseconds interval)
-        : sources(data), Ticker([this]() { UpdateLoop(); }, interval) {
+    Manager(const std::vector<Source>& data, const std::chrono::milliseconds interval)
+        : Ticker([this]() { UpdateLoop(); }, interval), sources(data) {
         Init();
     };
 
-    static Manager* GetSingleton(std::vector<Source>& data, int u_intervall = 3000) {
+    static Manager* GetSingleton(const std::vector<Source>& data, const int u_intervall = 3000) {
         static Manager singleton(data, std::chrono::milliseconds(u_intervall));
         return &singleton;
     }
 
     // Use Or Take Compatibility
-    std::atomic<bool> po3_use_or_take = false;
-    std::atomic<bool> listen_activate = true;
     std::atomic<bool> listen_equip = true;
-    std::atomic<bool> listen_crosshair = true;
     std::atomic<bool> listen_container_change = true;
-    std::atomic<bool> listen_menuopenclose = true;
 
     std::atomic<bool> isUninstalled = false;
 
 	const char* GetType() override { return "Manager"; }
 
-    inline void Uninstall() {isUninstalled.store(true);}
+    void Uninstall() {isUninstalled.store(true);}
 
     void ClearWOUpdateQueue() { _ref_stops_.clear(); }
 
     // use it only for world objects! checks if there is a stage instance for the given refid
-    [[nodiscard]] const bool RefIsRegistered(const RefID refid);
+    [[nodiscard]] bool RefIsRegistered(RefID refid);
 
-    [[nodiscard]] const bool RegisterAndGo(const FormID some_formid, const Count count, const RefID location_refid,
+    void Register(FormID some_formid, Count count, RefID location_refid,
                                            Duration register_time = 0);
-
-    // giris noktasi RegisterAndGo uzerinden
-    [[nodiscard]] const bool RegisterAndGo(RE::TESObjectREFR* wo_ref);
-
-	bool HandleDropCheck(RE::TESObjectREFR* ref);
-
-	void HandleDrop(const FormID dropped_formid, Count count, RE::TESObjectREFR* dropped_stage_ref);
-
-    void HandlePickUp(const FormID pickedup_formid, const Count count, const RefID wo_refid, const bool eat,
-		RE::TESObjectREFR* npc_ref = nullptr);
-
-	void HandleConsume(const FormID stage_formid);
-
-    [[nodiscard]] const bool HandleBuy(const FormID bought_formid, const Count bought_count,
-		const RefID vendor_chest_refid);
 
 	void HandleCraftingEnter(unsigned int bench_type);
 
 	void HandleCraftingExit();
 
-	[[nodiscard]] const bool IsExternalContainer(const FormID stage_formid, const RefID refid);
-
-    [[nodiscard]] const bool IsExternalContainer(const RE::TESObjectREFR* external_ref);
-
-    [[nodiscard]] const bool LinkExternalContainer(const FormID some_formid, Count item_count,
-                                                   const RefID externalcontainer);
-
-    [[nodiscard]] const bool UnLinkExternalContainer(const FormID some_formid, Count count,
-		const RefID externalcontainer);
-
-    bool UpdateStages(RE::TESObjectREFR* ref, const float _time = 0);
-
-    bool UpdateStages(RefID loc_refid);
+    void Update(RE::TESObjectREFR* from, RE::TESObjectREFR* to=nullptr, const RE::TESForm* what=nullptr, Count count=0);
 
 	void SwapWithStage(RE::TESObjectREFR* wo_ref);
 
     void Reset();
 
-	void HandleFormDelete(const FormID a_refid);
+	void HandleFormDelete(FormID a_refid);
 
     void SendData();
 
-    // for syncing the previous session's data with the current session
-    void _HandleLoc(RE::TESObjectREFR* loc_ref);
+    // for syncing the previous session's (fake form) data with the current session
+    void HandleLoc(RE::TESObjectREFR* loc_ref);
     
-    StageInstance* _RegisterAtReceiveData(const FormID source_formid, const RefID loc,
+    StageInstance* RegisterAtReceiveData(FormID source_formid, RefID loc,
                                           const StageInstancePlain& st_plain);
 
     void ReceiveData();
 
     void Print();
 
-    const std::vector<Source>& GetSources() const;
+    const std::vector<Source>& GetSources() const { return sources; }
+
+	const std::map<RefID, float>& GetUpdateQueue() const { return _ref_stops_; }
+
+	void HandleDynamicWO(RE::TESObjectREFR* ref);
 
 
 };
