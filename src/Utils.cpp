@@ -82,6 +82,24 @@ std::string DecodeTypeCode(std::uint32_t typeCode)
     return std::string(buf, buf + 4);
 }
 
+bool FileIsEmpty(const std::string& filename)
+{
+	std::ifstream file(filename);
+    if (!file.is_open()) {
+        return false;  // File could not be opened, treat as not empty or handle error
+    }
+
+    char ch;
+    while (file.get(ch)) {
+        if (!std::isspace(static_cast<unsigned char>(ch))) {
+            return false;  // Found a non-whitespace character
+        }
+    }
+
+    return true;  // Only whitespace characters or file is empty
+}
+
+
 bool isValidHexWithLength7or8(const char* input)
 {
     std::string inputStr(input);

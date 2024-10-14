@@ -4,7 +4,7 @@
 
 bool Settings::IsQFormType(const FormID formid, const std::string& qformtype) {
     // POPULATE THIS
-	auto* form = GetFormByID(formid);
+    const auto* form = GetFormByID(formid);
     if (qformtype == "FOOD") return IsFoodItem(form);
     if (qformtype == "INGR") return FormIsOfType(form, RE::IngredientItem::FORMTYPE);
     if (qformtype == "MEDC") return IsMedicineItem(form);
@@ -27,7 +27,7 @@ std::string Settings::GetQFormType(const FormID formid)
 }
 
 bool Settings::IsInExclude(const FormID formid, std::string type) {
-	auto form = GetFormByID(formid);
+    const auto form = GetFormByID(formid);
     if (!form) {
         logger::warn("Form not found.");
         return false;
@@ -38,15 +38,14 @@ bool Settings::IsInExclude(const FormID formid, std::string type) {
         //logger::trace("Type is empty. for formid: {}", formid);
 		return false;
 	}
-    if (!Settings::exclude_list.count(type)) {
+    if (!Settings::exclude_list.contains(type)) {
 		logger::critical("Type not found in exclude list. for formid: {}", formid);
         return false;
     }
 
     std::string form_string = std::string(form->GetName());
-    std::string form_editorid = clib_util::editorID::get_editorID(form);
-        
-    if (!form_editorid.empty() && String::includesWord(form_editorid, Settings::exclude_list[type])) {
+
+    if (std::string form_editorid = clib_util::editorID::get_editorID(form); !form_editorid.empty() && String::includesWord(form_editorid, Settings::exclude_list[type])) {
 		logger::trace("Form is in exclude list.form_editorid: {}", form_editorid);
 		return true;
 	}
@@ -59,7 +58,7 @@ bool Settings::IsInExclude(const FormID formid, std::string type) {
     return false;
 }
 
-bool Settings::IsItem(const FormID formid, std::string type, bool check_exclude) {
+bool Settings::IsItem(const FormID formid, std::string type, const bool check_exclude) {
     if (!formid) return false;
     if (check_exclude && Settings::IsInExclude(formid, type)) return false;
     if (type.empty()) return !GetQFormType(formid).empty();
@@ -75,7 +74,7 @@ bool Settings::IsItem(const RE::TESObjectREFR* ref, std::string type) {
     return IsItem(base->GetFormID(),type);
 }
 
-std::vector<std::string> LoadExcludeList(const std::string postfix)
+std::vector<std::string> LoadExcludeList(const std::string& postfix)
  {
     const auto folder_path = "Data/SKSE/Plugins/AlchemyOfTime/" + postfix + "/exclude";
     logger::trace("Exclude path: {}", folder_path);
@@ -223,7 +222,7 @@ DefaultSettings parseDefaults_(const YAML::Node& config)
         std::vector<StageNo> allowed_stages;
         if (!transformer["allowed_stages"]) {
             // default is all stages
-            for (const auto& [key, _] : settings.items) {
+            for (const auto& key : settings.items | std::views::keys) {
                 allowed_stages.push_back(key);
             }
         } 
@@ -232,7 +231,7 @@ DefaultSettings parseDefaults_(const YAML::Node& config)
         } 
         else allowed_stages = transformer["allowed_stages"].as<std::vector<StageNo>>();
         if (allowed_stages.empty()) {
-            for (const auto& [key, _] : settings.items) {
+            for (const auto& key : settings.items | std::views::keys) {
 				allowed_stages.push_back(key);
 			}
         }
@@ -251,8 +250,14 @@ DefaultSettings parseDefaults_(const YAML::Node& config)
 DefaultSettings parseDefaults(std::string _type)
 { 
     const auto filename = "Data/SKSE/Plugins/AlchemyOfTime/" + _type + "/AoT_default" + _type + ".yml";
+
+	if (FileIsEmpty(filename)) {
+		logger::trace("File is empty: {}", filename);
+		return DefaultSettings();
+	}
+
     logger::info("Filename: {}", filename);
-	YAML::Node config = YAML::LoadFile(filename);
+    const YAML::Node config = YAML::LoadFile(filename);
     logger::info("File loaded.");
     auto temp_settings = parseDefaults_(config);
     if (!temp_settings.CheckIntegrity()) {
@@ -260,7 +265,7 @@ DefaultSettings parseDefaults(std::string _type)
     }
     return temp_settings;
 }
-CustomSettings parseCustoms(std::string _type)
+CustomSettings parseCustoms(const std::string& _type)
 {
     CustomSettings _custom_settings;
     const auto folder_path = "Data/SKSE/Plugins/AlchemyOfTime/" + _type + "/custom";
@@ -271,6 +276,12 @@ CustomSettings parseCustoms(std::string _type)
 
         if (entry.is_regular_file() && entry.path().extension() == ".yml") {
             const auto filename = entry.path().string();
+
+            if (FileIsEmpty(filename)) {
+				logger::trace("File is empty: {}", filename);
+				continue;
+            };
+
             YAML::Node config = YAML::LoadFile(filename);
 
             if (!config["ownerLists"]) {
@@ -299,6 +310,7 @@ CustomSettings parseCustoms(std::string _type)
     }
     return _custom_settings;
 }
+
 void LoadINISettings()
 {
     logger::info("Loading ini settings");
@@ -382,7 +394,7 @@ void LoadSettings()
 			Settings::failed_to_load = true;
             return;
         }
-        for (const auto& [key,_] : Settings::custom_settings[_qftype]) {
+        for (const auto& key : Settings::custom_settings[_qftype] | std::views::keys) {
             logger::trace("Key: {}", key.front());
         }
         try {

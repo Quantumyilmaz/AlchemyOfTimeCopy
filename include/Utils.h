@@ -24,6 +24,7 @@ std::vector<std::string> ReadLogFile();
 
 std::string DecodeTypeCode(std::uint32_t typeCode);
 
+bool FileIsEmpty(const std::string& filename);
 
 inline bool isValidHexWithLength7or8(const char* input);
 
