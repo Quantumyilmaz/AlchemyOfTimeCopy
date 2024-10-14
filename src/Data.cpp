@@ -497,7 +497,7 @@ void Source::UpdateTimeModulationInInventory(RE::TESObjectREFR* inventory_owner,
 		return;
 	}
 
-    if (data[inventory_owner_refid].empty()) {
+    if (data.at(inventory_owner_refid).empty()) {
         logger::trace("No instances found for inventory owner {} and source {}", inventory_owner_refid, editorid);
         return;
     }

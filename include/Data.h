@@ -9,21 +9,21 @@ struct Source {
     SourceData data;  // change this to a map with refid as key and vector of instances as value
 
     FormID formid = 0;
-    std::string editorid = "";
+    std::string editorid;
     DefaultSettings* defaultsettings = nullptr;  // eigentlich sollte settings heissen
     std::string qFormType;
 
     
-    Source(const FormID id, const std::string id_str, 
+    Source(const FormID id, const std::string& id_str,   // NOLINT(modernize-pass-by-value)
         //RE::EffectSetting* e_m, 
         DefaultSettings* sttngs=nullptr)
-        : formid(id), editorid(id_str), 
-        //empty_mgeff(e_m), 
-        defaultsettings(sttngs) { Init(); };
+        : formid(id), editorid(id_str),
+          //empty_mgeff(e_m), 
+        defaultsettings(sttngs) { Init(); }
 
     [[maybe_unused]] [[nodiscard]] std::string_view GetName() const;
 
-    RE::TESBoundObject* GetBoundObject() const { return GetFormByID<RE::TESBoundObject>(formid, editorid); };
+    [[nodiscard]] RE::TESBoundObject* GetBoundObject() const { return GetFormByID<RE::TESBoundObject>(formid, editorid); };
 
     std::map<RefID,std::vector<StageUpdate>> UpdateAllStages(const std::vector<RefID>& filter, float time);
 

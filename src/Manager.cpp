@@ -421,6 +421,7 @@ void Manager::Init()
 }
 
 std::set<float> Manager::GetUpdateTimes(const RE::TESObjectREFR* inventory_owner) {
+
     std::set<float> queued_updates;
 
 	const auto inventory_owner_refid = inventory_owner->GetFormID();
@@ -444,9 +445,11 @@ std::set<float> Manager::GetUpdateTimes(const RE::TESObjectREFR* inventory_owner
 	return queued_updates;
 }
 
-void Manager::UpdateInventory(RE::TESObjectREFR* ref, const float t)
+bool Manager::UpdateInventory(RE::TESObjectREFR* ref, const float t)
 {
-	const auto refid = ref->GetFormID();
+    bool update_took_place = false;
+    const auto refid = ref->GetFormID();
+
     for (size_t i = 0; i < sources.size(); ++i) {
         auto& src = sources[i];
         if (!src.IsHealthy()) continue;
@@ -455,10 +458,11 @@ void Manager::UpdateInventory(RE::TESObjectREFR* ref, const float t)
         if (src.data.at(refid).empty()) continue;
         const auto updated_stages = src.UpdateAllStages({refid}, t);
 		const auto& updates = updated_stages.contains(refid) ? updated_stages.at(refid) : std::vector<StageUpdate>();
+		if (!update_took_place && !updates.empty()) update_took_place = true;
 #ifndef NDEBUG
 		if (updates.empty()) {
 			logger::trace("UpdateInventory: No updates for source formid {} editorid {}", src.formid, src.editorid);
-        };
+        }
 #endif // !NDEBUG
 		for (const auto& update : updates) {
 			ApplyEvolutionInInventory(src.qFormType, ref, update.count, update.oldstage->formid, update.newstage->formid);
@@ -471,6 +475,8 @@ void Manager::UpdateInventory(RE::TESObjectREFR* ref, const float t)
 
     for (auto& src : sources) src.UpdateTimeModulationInInventory(ref, t);
     logger::trace("DONE");
+
+    return update_took_place;
 }
 
 void Manager::UpdateInventory(RE::TESObjectREFR* ref)
@@ -489,7 +495,10 @@ void Manager::UpdateInventory(RE::TESObjectREFR* ref)
 		const auto times = GetUpdateTimes(ref);
 		if (times.empty()) break;
         if (const auto t = *times.begin() + 0.000028f; t >= curr_time) break;
-		else UpdateInventory(ref, t);
+		else if(!UpdateInventory(ref, t)) {
+			logger::error("UpdateInventory: No updates for the time {}", t);
+		    break;
+		}
     }
 
 	UpdateInventory(ref, curr_time);
