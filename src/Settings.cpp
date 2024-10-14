@@ -253,7 +253,7 @@ DefaultSettings parseDefaults(std::string _type)
 
 	if (FileIsEmpty(filename)) {
 		logger::trace("File is empty: {}", filename);
-		return DefaultSettings();
+		return {};
 	}
 
     logger::info("Filename: {}", filename);
@@ -380,7 +380,7 @@ void LoadSettings()
     for (const auto& _qftype: Settings::QFORMS) {
         try {
             logger::info("Loading Settings::defaultsettings for {}", _qftype);
-			Settings::defaultsettings[_qftype] = parseDefaults(_qftype);
+			if (auto temp_default_settings = parseDefaults(_qftype); !temp_default_settings.IsEmpty()) Settings::defaultsettings[_qftype] = temp_default_settings;
         } catch (const std::exception& ex) {
             logger::critical("Failed to load default settings for {}: {}", _qftype, ex.what());
             Settings::failed_to_load = true;
@@ -388,7 +388,7 @@ void LoadSettings()
         }
         try {
             logger::info("Loading custom settings for {}", _qftype);
-			Settings::custom_settings[_qftype] = parseCustoms(_qftype);
+			if (auto temp_custom_settings = parseCustoms(_qftype); !temp_custom_settings.empty()) Settings::custom_settings[_qftype] = temp_custom_settings;
         } catch (const std::exception&) {
             logger::critical("Failed to load custom settings for {}", _qftype);
 			Settings::failed_to_load = true;

@@ -186,6 +186,8 @@ struct DefaultSettings {
 
     [[nodiscard]] bool CheckIntegrity();
 
+    [[nodiscard]] bool IsEmpty();
+
 private:
     bool init_failed = false;
 };

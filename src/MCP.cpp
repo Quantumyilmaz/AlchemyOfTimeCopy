@@ -47,6 +47,12 @@ void __stdcall UI::RenderStatus()
     constexpr auto color_operational = ImVec4(0, 1, 0, 1);
     constexpr auto color_not_operational = ImVec4(1, 0, 0, 1);
 
+
+	if (!M) {
+		ImGui::TextColored(color_not_operational, "Mod is not working! Check log for more info.");
+        return;
+	}
+
     if (ImGui::BeginTable("table_status", 3, table_flags)) {
         ImGui::TableSetupColumn("Module");
         ImGui::TableSetupColumn("Default Preset");
@@ -58,7 +64,7 @@ void __stdcall UI::RenderStatus()
             ImGui::TableNextColumn();
             ImGui::Text(module_name.c_str());
             ImGui::TableNextColumn();
-            const auto loaded_default = Settings::defaultsettings[module_name].IsHealthy();
+			const auto loaded_default = Settings::defaultsettings.contains(module_name) ? Settings::defaultsettings.at(module_name).IsHealthy() : false;
             const auto loaded_default_str = loaded_default ? "Loaded" : "Not Loaded";
             const auto color = loaded_default ? color_operational : color_not_operational;
             ImGui::TextColored(color, loaded_default_str);
@@ -205,7 +211,13 @@ void __stdcall UI::RenderStages()
 		return;
 	}
 
-	RefreshButton();
+    RefreshButton();
+
+	if (mcp_sources.empty()) {
+		ImGui::Text("No stages available");
+		return;
+	}
+
 
 	ImGui::Text("Source List");
 
