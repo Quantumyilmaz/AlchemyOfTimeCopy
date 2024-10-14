@@ -24,6 +24,7 @@ std::vector<std::string> ReadLogFile();
 
 std::string DecodeTypeCode(std::uint32_t typeCode);
 
+bool FileIsEmpty(const std::string& filename);
 
 inline bool isValidHexWithLength7or8(const char* input);
 
@@ -336,6 +337,19 @@ namespace Inventory {
     inline std::int32_t GetItemCount(RE::TESBoundObject* item, RE::TESObjectREFR* inventory_owner);
 
     bool IsQuestItem(const FormID formid, RE::TESObjectREFR* inv_owner);
+
+    /*template <typename T>
+    void UpdateItemList() {
+        if (const auto ui = RE::UI::GetSingleton(); ui->IsMenuOpen(T::MENU_NAME)) {
+            if (auto inventory_menu = ui->GetMenu<T>()) {
+                if (auto itemlist = inventory_menu->GetRuntimeData().itemList) {
+                    logger::trace("Updating itemlist.");
+                    itemlist->Update();
+                } else logger::info("Itemlist is null.");
+            } else logger::info("Inventory menu is null.");
+        } else logger::info("Inventory menu is not open.");
+    }*/
+
 };
 
 namespace Menu {

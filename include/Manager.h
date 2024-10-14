@@ -68,8 +68,8 @@ class Manager final : public Ticker, public SaveLoadData {
     
     void Init();
 
-    std::set<float> GetUpdateTimes(RE::TESObjectREFR* inventory_owner);
-    void UpdateInventory(RE::TESObjectREFR* ref, const float t);
+    std::set<float> GetUpdateTimes(const RE::TESObjectREFR* inventory_owner);
+    bool UpdateInventory(RE::TESObjectREFR* ref, const float t);
     void UpdateInventory(RE::TESObjectREFR* ref);
     void UpdateWO(RE::TESObjectREFR* ref);
 	void SyncWithInventory(RE::TESObjectREFR* ref);

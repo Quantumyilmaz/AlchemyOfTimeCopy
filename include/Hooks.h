@@ -15,6 +15,6 @@ namespace Hooks {
         RE::UI_MESSAGE_RESULTS ProcessMessage_Hook(RE::UIMessage& a_message);
         static inline Manager* M = nullptr;
     public:
-        static void InstallHook(REL::VariantID varID, Manager* mngr);
+        static void InstallHook(const REL::VariantID& varID, Manager* mngr);
     };
 };

@@ -3,7 +3,7 @@
 using namespace Hooks;
 
 template <typename MenuType>
-void MenuHook<MenuType>::InstallHook(REL::VariantID varID, Manager* mngr) {
+void MenuHook<MenuType>::InstallHook(const REL::VariantID& varID, Manager* mngr) {
     REL::Relocation<std::uintptr_t> vTable(varID);
     _ProcessMessage = vTable.write_vfunc(0x4, &MenuHook<MenuType>::ProcessMessage_Hook);
 	M = mngr;
@@ -11,8 +11,7 @@ void MenuHook<MenuType>::InstallHook(REL::VariantID varID, Manager* mngr) {
 
 template <typename MenuType>
 RE::UI_MESSAGE_RESULTS MenuHook<MenuType>::ProcessMessage_Hook(RE::UIMessage& a_message) {
-    const std::string_view menuname = MenuType::MENU_NAME;
-    if (_strcmpi(a_message.menu.c_str(), std::string(menuname).c_str()) == 0) {
+    if (const std::string_view menuname = MenuType::MENU_NAME; _strcmpi(a_message.menu.c_str(), std::string(menuname).c_str()) == 0) {
         if (const auto msg_type = static_cast<int>(a_message.type.get()); msg_type == 1) {
             if (menuname == RE::FavoritesMenu::MENU_NAME) {
                 logger::trace("Favorites menu is open.");
@@ -31,7 +30,7 @@ RE::UI_MESSAGE_RESULTS MenuHook<MenuType>::ProcessMessage_Hook(RE::UIMessage& a_
             } 
             else if (menuname == RE::ContainerMenu::MENU_NAME) {
                 logger::trace("Container menu is open.");
-                if (auto container = Menu::GetContainerFromMenu()) {
+                if (const auto container = Menu::GetContainerFromMenu()) {
                     M->Update(RE::PlayerCharacter::GetSingleton());
                     M->Update(container);
                 } else logger::error("Could not get container.");

@@ -334,7 +334,13 @@ inline void Manager::RemoveItem(RE::TESObjectREFR* moveFrom, const FormID item_i
 		if (item->second.first < count) {
 			logger::warn("Item count is less than the count to remove.");
 		}
-		moveFrom->RemoveItem(item->first, count, RE::ITEM_REMOVE_REASON::kRemove, nullptr, nullptr);
+
+		auto* bound = item->first;
+		moveFrom->RemoveItem(bound, count, RE::ITEM_REMOVE_REASON::kRemove, nullptr, nullptr);
+
+		/*SKSE::GetTaskInterface()->AddTask([moveFrom, bound, count]() {
+		    moveFrom->RemoveItem(bound, count, RE::ITEM_REMOVE_REASON::kRemove, nullptr, nullptr);
+		});*/
 	}
 }
 
@@ -354,7 +360,8 @@ void Manager::AddItem(RE::TESObjectREFR* addTo, RE::TESObjectREFR* addFrom, cons
         if (addTo->GetFormID() == addFrom->GetFormID()) {
             logger::warn("Add to and add from are the same.");
             return;
-        } else if (!addFrom->HasContainer()) {
+        }
+        if (!addFrom->HasContainer()) {
             logger::warn("Add from does not have a container.");
             return;
         }
@@ -362,14 +369,41 @@ void Manager::AddItem(RE::TESObjectREFR* addTo, RE::TESObjectREFR* addFrom, cons
 
     logger::trace("Adding item.");
 
-    auto* bound = RE::TESForm::LookupByID<RE::TESBoundObject>(item_id);
-    if (!bound) {
-        logger::critical("Bound is null.");
-        return;
-    }
-    logger::trace("Adding item to container.");
-    addTo->AddObjectToContainer(bound, nullptr, count, addFrom);
-    logger::trace("Item added to container.");
+	if (auto* bound = RE::TESForm::LookupByID<RE::TESBoundObject>(item_id)) {
+		logger::trace("Adding item to container.");
+		addTo->AddObjectToContainer(bound, nullptr, count, addFrom);
+        logger::trace("Item added to container.");
+	}
+	else logger::critical("Bound is null.");
+
+	/*SKSE::GetTaskInterface()->AddTask([item_id, count, addTo, addFrom]() {
+        if (auto* bound = RE::TESForm::LookupByID<RE::TESBoundObject>(item_id)) {
+            logger::trace("Adding item to container.");
+            addTo->AddObjectToContainer(bound, nullptr, count, addFrom);
+			if (auto* ui = RE::UI::GetSingleton(); ui->IsItemMenuOpen()) {
+				logger::trace("Item menu is open.");
+                if (REL::Module::IsSE()) {
+			        RE::SendUIMessage::SendInventoryUpdateMessage(addTo, bound);
+				    if (addFrom) RE::SendUIMessage::SendInventoryUpdateMessage(addFrom, bound);
+                }
+                if (ui->IsMenuOpen(RE::ContainerMenu::MENU_NAME)) {
+                    auto menu = ui->GetMenu(RE::ContainerMenu::MENU_NAME);
+                    Inventory::UpdateItemList<RE::ContainerMenu>();
+                }
+				else if (ui->IsMenuOpen(RE::BarterMenu::MENU_NAME)) {
+					auto menu = ui->GetMenu(RE::BarterMenu::MENU_NAME);
+					Inventory::UpdateItemList<RE::BarterMenu>();
+				}
+				else if (ui->IsMenuOpen(RE::InventoryMenu::MENU_NAME)) {
+					auto menu = ui->GetMenu(RE::InventoryMenu::MENU_NAME);
+					Inventory::UpdateItemList<RE::InventoryMenu>();
+				}
+				
+			}
+            logger::trace("Item added to container.");
+        }
+        else logger::critical("Bound is null.");
+	});*/
 }
 
 
@@ -386,7 +420,8 @@ void Manager::Init()
     logger::info("Manager initialized with instance limit {}", _instance_limit);
 }
 
-std::set<float> Manager::GetUpdateTimes(RE::TESObjectREFR* inventory_owner) {
+std::set<float> Manager::GetUpdateTimes(const RE::TESObjectREFR* inventory_owner) {
+
     std::set<float> queued_updates;
 
 	const auto inventory_owner_refid = inventory_owner->GetFormID();
@@ -410,9 +445,11 @@ std::set<float> Manager::GetUpdateTimes(RE::TESObjectREFR* inventory_owner) {
 	return queued_updates;
 }
 
-void Manager::UpdateInventory(RE::TESObjectREFR* ref, const float t)
+bool Manager::UpdateInventory(RE::TESObjectREFR* ref, const float t)
 {
-	const auto refid = ref->GetFormID();
+    bool update_took_place = false;
+    const auto refid = ref->GetFormID();
+
     for (size_t i = 0; i < sources.size(); ++i) {
         auto& src = sources[i];
         if (!src.IsHealthy()) continue;
@@ -421,10 +458,11 @@ void Manager::UpdateInventory(RE::TESObjectREFR* ref, const float t)
         if (src.data.at(refid).empty()) continue;
         const auto updated_stages = src.UpdateAllStages({refid}, t);
 		const auto& updates = updated_stages.contains(refid) ? updated_stages.at(refid) : std::vector<StageUpdate>();
+		if (!update_took_place && !updates.empty()) update_took_place = true;
 #ifndef NDEBUG
 		if (updates.empty()) {
 			logger::trace("UpdateInventory: No updates for source formid {} editorid {}", src.formid, src.editorid);
-        };
+        }
 #endif // !NDEBUG
 		for (const auto& update : updates) {
 			ApplyEvolutionInInventory(src.qFormType, ref, update.count, update.oldstage->formid, update.newstage->formid);
@@ -437,6 +475,8 @@ void Manager::UpdateInventory(RE::TESObjectREFR* ref, const float t)
 
     for (auto& src : sources) src.UpdateTimeModulationInInventory(ref, t);
     logger::trace("DONE");
+
+    return update_took_place;
 }
 
 void Manager::UpdateInventory(RE::TESObjectREFR* ref)
@@ -455,7 +495,10 @@ void Manager::UpdateInventory(RE::TESObjectREFR* ref)
 		const auto times = GetUpdateTimes(ref);
 		if (times.empty()) break;
         if (const auto t = *times.begin() + 0.000028f; t >= curr_time) break;
-		else UpdateInventory(ref, t);
+		else if(!UpdateInventory(ref, t)) {
+			logger::error("UpdateInventory: No updates for the time {}", t);
+		    break;
+		}
     }
 
 	UpdateInventory(ref, curr_time);
@@ -501,7 +544,7 @@ void Manager::SyncWithInventory(RE::TESObjectREFR* ref)
     for (auto& [formid, instances] : formid_instances_map) {
 		handled_formids.insert(formid);
         const auto it = loc_inventory.find(GetFormByID<RE::TESBoundObject>(formid));
-        auto total_registry_count = total_registry_counts[formid];
+        const auto total_registry_count = total_registry_counts[formid];
         const auto inventory_count = it != loc_inventory.end() ? it->second.first : 0;
         auto diff = total_registry_count - inventory_count;
         if (diff == 0) {
@@ -513,18 +556,18 @@ void Manager::SyncWithInventory(RE::TESObjectREFR* ref)
 			Register(formid, -diff, loc_refid, current_time);
             continue;
         }
-        for (auto& instance : instances) {
+        for (const auto& instance : instances) {
             if (const auto bound = GetFormByID<RE::TESBoundObject>(formid);
                 bound && instance->xtra.is_fake && locs_to_be_handled.contains(loc_refid)) {
                 AddItem(ref, nullptr, formid, diff);
                 break;
-            } else if (diff <= instance->count) {
+            }
+            if (diff <= instance->count) {
                 instance->count -= diff;
                 break;
-            } else {
-                diff -= instance->count;
-                instance->count = 0;
             }
+            diff -= instance->count;
+            instance->count = 0;
         }
     }
 
@@ -585,6 +628,7 @@ void Manager::UpdateWO(RE::TESObjectREFR* ref)
 void Manager::UpdateRef(RE::TESObjectREFR* loc)
 {
     if (loc->HasContainer()) UpdateInventory(loc);
+	else if (loc->IsDeleted() || loc->IsDisabled() || loc->IsMarkedForDeletion()) HandleDynamicWO(loc);
 	else if (Settings::world_objects_evolve) UpdateWO(loc);
     else return;
     
@@ -1195,12 +1239,11 @@ void Manager::HandleWOBaseChange(RE::TESObjectREFR* ref)
 	if (!ref) return;
 	if (const auto bound = ref->GetObjectReference()) {
 		if (bound->IsDynamicForm()) return HandleDynamicWO(ref);
-		auto* src = GetSource(bound->GetFormID());
+        const auto* src = GetSource(bound->GetFormID());
 		if (!src || !src->IsHealthy()) return;
         auto* st_inst = GetWOStageInstance(ref);
 		if (!st_inst || st_inst->count <= 0) return;
-		const auto* bound_expected = src->IsFakeStage(st_inst->no) ? src->GetBoundObject() : st_inst->GetBound();
-        if (bound_expected->GetFormID() != bound->GetFormID()) {
+        if (const auto* bound_expected = src->IsFakeStage(st_inst->no) ? src->GetBoundObject() : st_inst->GetBound(); bound_expected->GetFormID() != bound->GetFormID()) {
 	        st_inst->count = 0;
 			queue_delete_.insert(ref->GetFormID());
         }

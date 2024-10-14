@@ -84,10 +84,10 @@ namespace Settings {
     };
 };
 
-std::vector<std::string> LoadExcludeList(const std::string postfix);
+std::vector<std::string> LoadExcludeList(const std::string& postfix);
 DefaultSettings parseDefaults_(const YAML::Node& config);
 DefaultSettings parseDefaults(std::string _type);
-CustomSettings parseCustoms(std::string _type);
+CustomSettings parseCustoms(const std::string& _type);
 void LoadINISettings();
 void LoadSettings();
 

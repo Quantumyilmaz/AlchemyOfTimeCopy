@@ -145,12 +145,8 @@ bool Stage::CheckIntegrity() const {
 bool DefaultSettings::CheckIntegrity() {
     if (items.empty() || durations.empty() || stage_names.empty() || effects.empty() || numbers.empty()) {
         logger::error("One of the maps is empty.");
-        // list sizes of each
-        logger::info("Items size: {}", items.size());
-        logger::info("Durations size: {}", durations.size());
-        logger::info("Stage names size: {}", stage_names.size());
-        logger::info("Effects size: {}", effects.size());
-        logger::info("Numbers size: {}", numbers.size());
+        logger::trace("Items size: {}, Durations size: {}, Stage names size: {}, Effects size: {}, Numbers size: {}",
+                      items.size(), durations.size(), stage_names.size(), effects.size(), numbers.size());
         init_failed = true;
         return false;
     }
@@ -164,8 +160,8 @@ bool DefaultSettings::CheckIntegrity() {
             logger::error("Key {} not found in numbers.", i);
             return false;
         }
-        if (!items.count(i) || !crafting_allowed.count(i) || !durations.count(i) || !stage_names.count(i) ||
-            !effects.count(i)) {
+        if (!items.contains(i) || !crafting_allowed.contains(i) || !durations.contains(i) || !stage_names.contains(i) ||
+            !effects.contains(i)) {
 			logger::error("Key {} not found in all maps.", i);
             init_failed = true;
 			return false;
@@ -177,8 +173,8 @@ bool DefaultSettings::CheckIntegrity() {
 			return false;
 		}
                 
-        if (costoverrides.count(i) == 0) costoverrides[i] = -1;
-		if (weightoverrides.count(i) == 0) weightoverrides[i] = -1.0f;
+        if (!costoverrides.contains(i)) costoverrides[i] = -1;
+		if (!weightoverrides.contains(i)) weightoverrides[i] = -1.0f;
 
 	}
     if (!decayed_id) {
@@ -187,8 +183,8 @@ bool DefaultSettings::CheckIntegrity() {
         return false;
     }
     for (const auto& [_formID, _transformer] : transformers) {
-        FormID _finalFormEditorID = std::get<0>(_transformer);
-        Duration _duration = std::get<1>(_transformer);
+        const FormID _finalFormEditorID = std::get<0>(_transformer);
+        const Duration _duration = std::get<1>(_transformer);
         std::vector<StageNo> _allowedStages = std::get<2>(_transformer);
         if (!GetFormByID(_formID) || !GetFormByID(_finalFormEditorID)) {
 			logger::error("Formid not found.");
@@ -214,4 +210,13 @@ bool DefaultSettings::CheckIntegrity() {
 		}
 	}
 	return true;
+}
+
+bool DefaultSettings::IsEmpty()
+{
+	if (numbers.empty()) {
+		init_failed = true;
+	    return true;
+	}
+	return false;
 }
