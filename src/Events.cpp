@@ -29,9 +29,9 @@ void OurEventSink::HandleWO(RE::TESObjectREFR* ref) const
 void OurEventSink::HandleWOsInCell() const
 {
 	logger::trace("HandleWOsInCell: Calling Update.");
-	auto* player = RE::PlayerCharacter::GetSingleton();
+    const auto* player = RE::PlayerCharacter::GetSingleton();
     //M->Update(player);
-	auto player_cell = player->GetParentCell();
+    const auto player_cell = player->GetParentCell();
 	if (!player_cell) return;
 	player_cell->ForEachReference([this](RE::TESObjectREFR* arg) {
 		if (!arg) return RE::BSContainer::ForEachResult::kContinue;
@@ -105,6 +105,7 @@ RE::BSEventNotifyControl OurEventSink::ProcessEvent(const SKSE::CrosshairRefEven
     /*else HandleWO(event->crosshairRef.get());*/
 
     if (!event->crosshairRef->HasContainer()) HandleWO(event->crosshairRef.get());
+	else if (M->RefIsRegistered(event->crosshairRef->GetFormID())) M->Update(event->crosshairRef.get());
         
     return RE::BSEventNotifyControl::kContinue;
 }
@@ -121,8 +122,7 @@ RE::BSEventNotifyControl OurEventSink::ProcessEvent(const RE::TESFurnitureEvent*
     if (event->targetFurniture->GetBaseObject()->formType.underlying() != 40)
         return RE::BSEventNotifyControl::kContinue;
 
-
-    auto bench = event->targetFurniture->GetBaseObject()->As<RE::TESFurniture>();
+    const auto bench = event->targetFurniture->GetBaseObject()->As<RE::TESFurniture>();
     if (!bench) return RE::BSEventNotifyControl::kContinue;
     auto bench_type = static_cast<std::uint8_t>(bench->workBenchData.benchType.get());
     logger::trace("Furniture event: {}", bench_type);
