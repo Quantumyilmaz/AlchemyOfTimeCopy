@@ -164,7 +164,7 @@ DefaultSettings parseDefaults_(const YAML::Node& config)
         logger::trace("Effects");
         std::vector<StageEffect> effects;
         if (!stageNode["mgeffect"] || stageNode["mgeffect"].size() == 0) {
-			logger::info("Effects are empty. Skipping.");
+			logger::trace("Effects are empty. Skipping.");
         } else {
             for (const auto& effectNode : stageNode["mgeffect"]) {
                 const auto temp_effect_formeditorid =
@@ -185,7 +185,7 @@ DefaultSettings parseDefaults_(const YAML::Node& config)
         settings.effects[temp_no] = effects;
     }
     // final formid
-    logger::info("terminal item");
+    logger::trace("terminal item");
     const FormID temp_decayed_id =
         config["finalFormEditorID"] && !config["finalFormEditorID"].IsNull()
 			? GetFormEditorIDFromString(config["finalFormEditorID"].as<std::string>())
@@ -193,10 +193,11 @@ DefaultSettings parseDefaults_(const YAML::Node& config)
     if (!temp_decayed_id) {
         logger::error("Decayed id is 0.");
         return DefaultSettings();
-    } else logger::info("Decayed id: {}", temp_decayed_id);
+    }
+    logger::trace("Decayed id: {}", temp_decayed_id);
     settings.decayed_id = temp_decayed_id;
     // delayers
-    logger::info("timeModulators");
+    logger::trace("timeModulators");
     for (const auto& modulator : config["timeModulators"]) {
         const auto temp_formeditorid = modulator["FormEditorID"] && !modulator["FormEditorID"].IsNull()
                                             ? modulator["FormEditorID"].as<std::string>()
@@ -252,7 +253,7 @@ DefaultSettings parseDefaults(std::string _type)
     const auto filename = "Data/SKSE/Plugins/AlchemyOfTime/" + _type + "/AoT_default" + _type + ".yml";
 
 	if (FileIsEmpty(filename)) {
-		logger::trace("File is empty: {}", filename);
+		logger::info("File is empty: {}", filename);
 		return {};
 	}
 
@@ -270,7 +271,7 @@ CustomSettings parseCustoms(const std::string& _type)
     CustomSettings _custom_settings;
     const auto folder_path = "Data/SKSE/Plugins/AlchemyOfTime/" + _type + "/custom";
     std::filesystem::create_directories(folder_path);
-    logger::trace("Custom path: {}", folder_path);
+    logger::info("Custom path: {}", folder_path);
         
     for (const auto& entry : std::filesystem::directory_iterator(folder_path)) {
 
@@ -278,18 +279,22 @@ CustomSettings parseCustoms(const std::string& _type)
             const auto filename = entry.path().string();
 
             if (FileIsEmpty(filename)) {
-				logger::trace("File is empty: {}", filename);
+				logger::info("File is empty: {}", filename);
 				continue;
             };
 
             YAML::Node config = YAML::LoadFile(filename);
 
             if (!config["ownerLists"]) {
-				logger::trace("OwnerLists not found in {}", filename);
+				logger::warn("OwnerLists not found in {}", filename);
 				continue;
 			}
 
             for (const auto& Node_ : config["ownerLists"]){
+				if (!Node_["owners"]) {
+					logger::warn("Owners not found in {}", filename);
+					continue;
+				}
                 // we have list of owners at each node or a scalar owner
                 if (Node_["owners"].IsScalar()) {
                     const auto ownerName = Node_["owners"].as<std::string>();
@@ -389,8 +394,8 @@ void LoadSettings()
         try {
             logger::info("Loading custom settings for {}", _qftype);
 			if (auto temp_custom_settings = parseCustoms(_qftype); !temp_custom_settings.empty()) Settings::custom_settings[_qftype] = temp_custom_settings;
-        } catch (const std::exception&) {
-            logger::critical("Failed to load custom settings for {}", _qftype);
+        } catch (const std::exception& ex) {
+			logger::critical("Failed to load custom settings for {}: {}", _qftype, ex.what());
 			Settings::failed_to_load = true;
             return;
         }
@@ -399,8 +404,8 @@ void LoadSettings()
         }
         try {
             Settings::exclude_list[_qftype] = LoadExcludeList(_qftype);
-        } catch (const std::exception&) {
-            logger::critical("Failed to load exclude list for {}", _qftype);
+        } catch (const std::exception& ex) {
+			logger::critical("Failed to load exclude list for {}: {}", _qftype, ex.what());
             Settings::failed_to_load = true;
             return;
         }
