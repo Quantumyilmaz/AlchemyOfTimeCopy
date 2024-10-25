@@ -101,7 +101,7 @@ std::vector<std::string> LoadExcludeList(const std::string& postfix)
 
 DefaultSettings parseDefaults_(const YAML::Node& config)
  {
-    logger::info("Parsing settings.");
+    logger::trace("Parsing settings.");
     DefaultSettings settings;
         //we have:stages, decayedFormEditorID and delayers
     if (!config["stages"] || config["stages"].size() == 0) {
@@ -115,7 +115,7 @@ DefaultSettings parseDefaults_(const YAML::Node& config)
 		}
         const auto temp_no = stageNode["no"].as<StageNo>();
         // add to numbers
-        logger::info("Stage no: {}", temp_no);
+        logger::trace("Stage no: {}", temp_no);
         settings.numbers.push_back(temp_no);
         const auto temp_formeditorid = stageNode["FormEditorID"] && !stageNode["FormEditorID"].IsNull()
                                             ? stageNode["FormEditorID"].as<std::string>()
@@ -204,6 +204,7 @@ DefaultSettings parseDefaults_(const YAML::Node& config)
                                             : "";
         const FormID temp_formid = GetFormEditorIDFromString(temp_formeditorid);
         settings.delayers[temp_formid] = !modulator["magnitude"].IsNull() ? modulator["magnitude"].as<float>() : 1;
+		settings.delayers_order.push_back(temp_formid);
     }
 
     for (const auto& transformer : config["transformers"]) {
@@ -238,6 +239,7 @@ DefaultSettings parseDefaults_(const YAML::Node& config)
         }
         auto temp_tuple = std::make_tuple(temp_formid2, temp_duration, allowed_stages);
         settings.transformers[temp_formid] = temp_tuple;
+		settings.transformers_order.push_back(temp_formid);
     }
         
     if (!settings.CheckIntegrity()) {
