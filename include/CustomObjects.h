@@ -180,7 +180,9 @@ struct DefaultSettings {
     FormID decayed_id = 0;
 
     std::map<FormID,float> delayers;
+    std::vector<FormID> delayers_order;
     std::map<FormID, std::tuple<FormID, Duration, std::vector<StageNo>>> transformers;
+	std::vector<FormID> transformers_order;
 
     [[nodiscard]] bool IsHealthy() const { return !init_failed; }
 

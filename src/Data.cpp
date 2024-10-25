@@ -453,7 +453,7 @@ bool Source::IsDecayedItem(const FormID _form_id) const {
 
 inline FormID Source::GetModulatorInInventory(RE::TESObjectREFR* inventory_owner) const {
     const auto inventory = inventory_owner->GetInventory();
-    for (const auto& dlyr_fid : defaultsettings->delayers | std::views::keys) {
+    for (const auto& dlyr_fid : defaultsettings->delayers_order) {
         if (const auto entry = inventory.find(RE::TESForm::LookupByID<RE::TESBoundObject>(dlyr_fid));
             entry != inventory.end() && entry->second.first > 0) {
             return dlyr_fid;
@@ -464,7 +464,7 @@ inline FormID Source::GetModulatorInInventory(RE::TESObjectREFR* inventory_owner
 
 inline FormID Source::GetTransformerInInventory(RE::TESObjectREFR* inventory_owner) const {
     const auto inventory = inventory_owner->GetInventory();
-	for (const auto& trns_fid : defaultsettings->transformers | std::views::keys) {
+	for (const auto& trns_fid : defaultsettings->transformers_order) {
 		if (const auto entry = inventory.find(RE::TESForm::LookupByID<RE::TESBoundObject>(trns_fid));
 			entry != inventory.end() && entry->second.first > 0) {
 			return trns_fid;
