@@ -245,6 +245,15 @@ void __stdcall UI::RenderStages()
 		}
 	}
 
+    ImGui::SameLine();
+    if (ImGui::Button("Exclude##addtoexclude")) {
+		const auto& temp_selected_source = mcp_sources[selected_source_index];
+		const auto temp_form = RE::TESForm::LookupByID(temp_selected_source.stages.begin()->item.formid);
+        if (const auto temp_editorid = clib_util::editorID::get_editorID(temp_form); !temp_editorid.empty()) {
+			Settings::AddToExclude(temp_editorid, temp_selected_source.type, "MCP");
+        }
+    }
+
 	if (mcp_sources.empty() || selected_source_index >= mcp_sources.size()) {
 		ImGui::Text("No sources available");
 		return;

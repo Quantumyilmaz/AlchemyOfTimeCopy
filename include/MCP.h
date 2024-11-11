@@ -72,7 +72,7 @@ namespace UI {
     inline std::string last_generated;
     inline std::string item_current = "##current";
     inline std::string sub_item_current = "##item";
-    inline std::string source_current = "##source"; 
+    inline std::string source_current = "##source";
     inline bool is_list_box_focused = false;
     inline ImGuiTextFilter* filter;
     inline ImGuiTextFilter* filter2;

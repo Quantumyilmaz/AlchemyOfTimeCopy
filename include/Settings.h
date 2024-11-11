@@ -54,6 +54,8 @@ namespace Settings {
 
 	[[nodiscard]] bool IsInExclude(FormID formid, std::string type = "");
 
+	void AddToExclude(const std::string& entry_name, const std::string& type, const std::string& filename);
+
     [[nodiscard]] bool IsItem(FormID formid, std::string type = "", bool check_exclude = false);
 
     [[nodiscard]] bool IsItem(const RE::TESObjectREFR* ref, std::string type = "");

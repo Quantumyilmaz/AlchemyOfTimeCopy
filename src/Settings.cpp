@@ -58,11 +58,37 @@ bool Settings::IsInExclude(const FormID formid, std::string type) {
     return false;
 }
 
+void Settings::AddToExclude(const std::string& entry_name, const std::string& type, const std::string& filename)
+{
+	if (entry_name.empty() || type.empty() || filename.empty()) {
+		logger::warn("Empty entry_name, type or filename.");
+		return;
+	}
+	// check if type is a valid qformtype
+	if (!std::ranges::any_of(Settings::QFORMS, [type](const std::string& qformtype) { return qformtype == type; })) {
+		logger::warn("AddToExclude: Invalid type: {}", type);
+		return;
+	}
+
+	const auto folder_path = "Data/SKSE/Plugins/AlchemyOfTime/" + type + "/exclude";
+	std::filesystem::create_directories(folder_path);
+	const auto file_path = folder_path + "/" + filename + ".txt";
+	// check if the entry is already in the list
+	if (std::ranges::find(Settings::exclude_list[type], entry_name) != Settings::exclude_list[type].end()) {
+		logger::warn("Entry already in exclude list: {}", entry_name);
+		return;
+	}
+	std::ofstream file(file_path, std::ios::app);
+	file << entry_name << std::endl;
+	file.close();
+	Settings::exclude_list[type].push_back(entry_name);
+}
+
 bool Settings::IsItem(const FormID formid, std::string type, const bool check_exclude) {
     if (!formid) return false;
     if (check_exclude && Settings::IsInExclude(formid, type)) return false;
     if (type.empty()) return !GetQFormType(formid).empty();
-	else return IsQFormType(formid, type);
+	return IsQFormType(formid, type);
 }
 
 bool Settings::IsItem(const RE::TESObjectREFR* ref, std::string type) {
