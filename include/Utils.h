@@ -3,6 +3,7 @@
 #include <atomic>
 #include <shared_mutex>
 #include "ClibUtil/editorID.hpp"
+#include <ranges>
 
 const auto mod_name = static_cast<std::string>(SKSE::PluginDeclaration::GetSingleton()->GetName());
 constexpr auto po3path = "Data/SKSE/Plugins/po3_Tweaks.dll";
@@ -236,7 +237,7 @@ namespace xData {
     template <typename T>
     void CopyExtraData(T* from, T* to){
         if (!from || !to) return;
-        switch (T->EXTRADATATYPE) {
+        switch (T::EXTRADATATYPE) {
             case RE::ExtraDataType::kEnchantment:
                 CopyEnchantment(from, to);
                 break;
@@ -288,7 +289,7 @@ namespace xData {
             default:
                 logger::warn("ExtraData type not found");
                 break;
-        };
+        }
     }
 
     [[nodiscard]] bool UpdateExtras(RE::ExtraDataList* copy_from, RE::ExtraDataList* copy_to);
