@@ -496,7 +496,7 @@ void Manager::UpdateInventory(RE::TESObjectREFR* ref)
 		if (times.empty()) break;
         if (const auto t = *times.begin() + 0.000028f; t >= curr_time) break;
 		else if(!UpdateInventory(ref, t)) {
-			logger::error("UpdateInventory: No updates for the time {}", t);
+			logger::warn("UpdateInventory: No updates for the time {}", t);
 		    break;
 		}
     }

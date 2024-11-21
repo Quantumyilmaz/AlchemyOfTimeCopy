@@ -38,7 +38,7 @@ StageInstance& StageInstance::operator=(const StageInstance& other)
 }
 
 float StageInstance::GetElapsed(const float curr_time) const {
-    if (_delay_mag == 0) return _elapsed;
+    if (fabs(_delay_mag) < EPSILON) return _elapsed;
     return (curr_time - _delay_start) * GetDelaySlope() + _elapsed;
 }
 
@@ -65,7 +65,7 @@ void StageInstance::SetDelay(const float time, const float delay, const FormID f
     // yeni steigungla yeni ausgangspunkt yapiyoruz
     // call only from UpdateTimeModulationInInventory
     if (xtra.is_transforming) return;
-    if (_delay_mag == delay && _delay_formid == formid) return;
+    if (fabs(_delay_mag - delay) < EPSILON && _delay_formid == formid) return;
 
     _elapsed = GetElapsed(time);
     _delay_start = time;

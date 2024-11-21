@@ -1,4 +1,6 @@
 #pragma once
+#include <algorithm>
+
 #include "DynamicFormTracker.h"
 
 struct Source {
@@ -79,7 +81,7 @@ struct Source {
         return !init_failed;
 	}
 
-	const Stage& GetDecayedStage() const { return decayed_stage; }
+	[[nodiscard]] const Stage& GetDecayedStage() const { return decayed_stage; }
 
 private:
 
@@ -105,14 +107,14 @@ private:
         std::vector<uint32_t> pMGEFFdurations;
         std::vector<float> pMGEFFmagnitudes;
 
-        // i need this many empty effects
+        // I need this many empty effects
         int n_empties = static_cast<int>(_effects.size()) - static_cast<int>(settings_effs.size());
-        if (n_empties < 0) n_empties = 0;
+        n_empties = std::max(n_empties, 0);
 
-        for (int j = 0; j < settings_effs.size(); j++) {
-            MGEFFs.push_back(settings_effs[j].beffect);
-            pMGEFFdurations.push_back(settings_effs.at(j).duration);
-            pMGEFFmagnitudes.push_back(settings_effs.at(j).magnitude);
+        for (auto& settings_eff : settings_effs) {
+            MGEFFs.push_back(settings_eff.beffect);
+            pMGEFFdurations.push_back(settings_eff.duration);
+            pMGEFFmagnitudes.push_back(settings_eff.magnitude);
         }
 
         for (int j = 0; j < n_empties; j++) {
@@ -142,8 +144,7 @@ private:
 
             if (stage_no == 0) RegisterStage(formid, stage_no);
 			else {
-                const auto stage_form = GetFormByID(stage_formid, "");
-				if (!stage_form) {
+                if (const auto stage_form = GetFormByID(stage_formid, ""); !stage_form) {
                     logger::error("Stage form {} not found.", stage_formid);
 					continue;
 				}
@@ -152,7 +153,7 @@ private:
         }
     }
 
-    size_t GetNStages() const;
+    [[nodiscard]] size_t GetNStages() const;
     
     [[nodiscard]] Stage GetFinalStage() const;
 
@@ -172,7 +173,7 @@ private:
     void RegisterStage(FormID stage_formid, StageNo stage_no);
 
     template <typename T>
-    const FormID FetchFake(const StageNo st_no) {
+    FormID FetchFake(const StageNo st_no) {
         auto* DFT = DynamicFormTracker::GetSingleton();
         if (editorid.empty()) {
 		    logger::error("Editorid is empty.");
