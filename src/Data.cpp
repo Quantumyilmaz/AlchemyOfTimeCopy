@@ -264,7 +264,7 @@ StageInstance* Source::InsertNewInstance(const StageInstance& stage_instance, co
 	return &data[loc].back();
 }
 
-StageInstance* Source::InitInsertInstanceWO(StageNo n, Count c, RefID l, Duration t_0)
+StageInstance* Source::InitInsertInstanceWO(StageNo n, const Count c, const RefID l, const Duration t_0)
 {
     if (init_failed) {
         logger::critical("InitInsertInstance: Initialisation failed.");
@@ -283,7 +283,7 @@ StageInstance* Source::InitInsertInstanceWO(StageNo n, Count c, RefID l, Duratio
     return InsertNewInstance(new_instance,l);
 }
 
-bool Source::InitInsertInstanceInventory(StageNo n, Count c, RE::TESObjectREFR* inventory_owner, Duration t_0) {
+bool Source::InitInsertInstanceInventory(const StageNo n, const Count c, RE::TESObjectREFR* inventory_owner, const Duration t_0) {
     if (!inventory_owner) {
         logger::error("Inventory owner is null.");
         return false;
@@ -791,73 +791,44 @@ Stage Source::GetTransformedStage(const FormID key_formid) const {
 
 void Source::SetDelayOfInstances(const float some_time, RE::TESObjectREFR* inventory_owner)
 {
-    if (!inventory_owner) {
-		logger::error("Inventory owner is null.");
-		return;
-	}
     const RefID loc = inventory_owner->GetFormID();
     if (!data.contains(loc)) {
         logger::error("Location {} does not exist.", loc);
         return;
     }
 
-    logger::trace("Setting delay of instances in inventory for time {}", some_time);
+    const auto transformer_best = GetTransformerInInventory(inventory_owner);
+    const auto delayer_best = GetModulatorInInventory(inventory_owner);
+    std::vector<StageNo> allowed_stages;
+	if (transformer_best && defaultsettings->transformers.contains(transformer_best)) {
+        allowed_stages = std::get<2>(defaultsettings->transformers[transformer_best]);
+	}
 
-    // first check for transformer
-    if (const FormID transformer_best = GetTransformerInInventory(inventory_owner)) {
-        logger::trace("Transformer found: {}", transformer_best);
-        const auto& allowed_stages = std::get<2>(defaultsettings->transformers[transformer_best]);
-        for (auto& instance : data.at(loc)) {
-			if (instance.count <= 0) continue;
-            if (Vector::HasElement<StageNo>(allowed_stages, instance.no)){
-                logger::trace("Setting transform to {} for instance with no {} bcs of form with id {}", transformer_best, instance.no, transformer_best);
-				instance.SetTransform(some_time, transformer_best);
-                logger::trace("Transform set to {} for instance with no {}", instance.GetDelayerFormID(), instance.no);
-            } else {
-                logger::trace("Removing transform for instance with no {} bcs of form with id {}", instance.no, transformer_best);
-                instance.RemoveTransform(some_time);
-            }
-		}
-    } else {
-        logger::trace("Transformer not found.");
-        for (auto& instance : data.at(loc)) {
-			if (instance.count <= 0) continue;
-            logger::trace("Removing transform for instance with no {} bcs of no transformer", instance.no);
-            instance.RemoveTransform(some_time);
-		}
-    }
-
-    const FormID delayer_best = GetModulatorInInventory(inventory_owner); // basically the first on the list
-    const float delay_ = delayer_best == 0 ? 1 : defaultsettings->delayers[delayer_best];
     for (auto& instance : data.at(loc)) {
-        if (instance.count <= 0) continue;
-        logger::trace("Setting delay to {} for instance with no {} bcs of form with id {}", delay_, instance.no, delayer_best);
-        instance.SetDelay(some_time, delay_, delayer_best);
-    }
+		if (instance.count <= 0) continue;
+		SetDelayOfInstance(instance, some_time, transformer_best, delayer_best, allowed_stages);
+	}
 }
 
 void Source::SetDelayOfInstance(StageInstance& instance, const float curr_time, RE::TESObjectREFR* inventory_owner) const {
     if (instance.count <= 0) return;
-
-    // first check for transformer
-    if (const auto transformer_best = GetTransformerInInventory(inventory_owner)) {
-        if (const auto& allowed_stages = std::get<2>(defaultsettings->transformers[transformer_best]); Vector::HasElement<StageNo>(allowed_stages, instance.no)) {
-            logger::trace("Setting transform to {} for instance with no {} bcs of form with id {}", transformer_best, instance.no, transformer_best);
-            instance.SetTransform(curr_time, transformer_best);
-            logger::trace("Transform set to {} for instance with no {}", instance.GetDelayerFormID(), instance.no);
-        } else {
-            logger::trace("Removing transform for instance with no {} bcs of form with id {}", instance.no, transformer_best);
-			instance.RemoveTransform(curr_time);
-		}
-    }
-    else {
-        logger::trace("Transformer not found. Removing.");
-		instance.RemoveTransform(curr_time);
-	}
-
+    const auto transformer_best = GetTransformerInInventory(inventory_owner);
     const auto delayer_best = GetModulatorInInventory(inventory_owner);
-    const float delay_ = delayer_best == 0 ? 1 : defaultsettings->delayers[delayer_best];
-    instance.SetDelay(curr_time, delay_, delayer_best);
+    std::vector<StageNo> allowed_stages;
+	if (transformer_best && defaultsettings->transformers.contains(transformer_best)) {
+        allowed_stages = std::get<2>(defaultsettings->transformers[transformer_best]);
+	}
+	SetDelayOfInstance(instance, curr_time, transformer_best, delayer_best, allowed_stages);
+}
+
+void Source::SetDelayOfInstance(StageInstance& instance, const float a_time, const FormID a_transformer, const FormID a_delayer, const std::vector<
+                                StageNo>& allowed_stages) const
+{
+	if (!a_transformer || !Vector::HasElement<StageNo>(allowed_stages, instance.no)) instance.RemoveTransform(a_time);
+	else return instance.SetTransform(a_time, a_transformer);
+
+	const float delay_ = !a_delayer ? 1 : defaultsettings->delayers.contains(a_delayer) ? defaultsettings->delayers.at(a_delayer) : 1;
+    instance.SetDelay(a_time, delay_, a_delayer);
 }
 
 bool Source::CheckIntegrity() {

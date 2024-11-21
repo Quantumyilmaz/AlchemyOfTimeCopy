@@ -12,7 +12,7 @@ struct StageEffect {
     std::uint32_t duration;  // in effectitem (not Duration, this is in seconds)
 
     StageEffect() : beffect(0), magnitude(0), duration(0) {}
-    StageEffect(FormID be, float mag, DurationMGEFF dur) : beffect(be), magnitude(mag), duration(dur) {}
+    StageEffect(const FormID be, const float mag, const DurationMGEFF dur) : beffect(be), magnitude(mag), duration(dur) {}
 
     [[nodiscard]] bool IsNull() const { return beffect == 0; }
     [[nodiscard]] bool HasMagnitude() const { return magnitude != 0; }
@@ -31,8 +31,8 @@ struct Stage {
 
 
     Stage(){};
-    Stage(FormID f, Duration d, StageNo s, StageName n, bool ca,std::vector<StageEffect> e)
-        : formid(f), duration(d), no(s), name(n), crafting_allowed(ca) ,mgeffect(e) {
+    Stage(const FormID f, const Duration d, const StageNo s, StageName n, const bool ca, const std::vector<StageEffect>& e)
+        : formid(f), duration(d), no(s), name(std::move(n)), mgeffect(e) ,crafting_allowed(ca) {
         if (!formid) logger::critical("FormID is null");
         else logger::trace("Stage: FormID {}, Duration {}, StageNo {}, Name {}", formid, duration, no, name);
         if (e.empty()) mgeffect.clear();
@@ -52,11 +52,11 @@ struct Stage {
         return no == other.no && formid == other.formid && duration == other.duration;
     }
 
-    RE::TESBoundObject* GetBound() const { return GetFormByID<RE::TESBoundObject>(formid); };
+    [[nodiscard]] RE::TESBoundObject* GetBound() const { return GetFormByID<RE::TESBoundObject>(formid); }
 
     [[nodiscard]] bool CheckIntegrity() const;
 
-    inline const char* GetExtraText() const { return GetBound()->GetName(); }
+    [[nodiscard]] inline const char* GetExtraText() const { return GetBound()->GetName(); }
 
 };
 
@@ -108,11 +108,11 @@ struct StageInstance {
 
     StageInstance& operator=(const StageInstance& other);
 
-    inline RE::TESBoundObject* GetBound() const { return GetFormByID<RE::TESBoundObject>(xtra.form_id); };
+    [[nodiscard]] RE::TESBoundObject* GetBound() const { return GetFormByID<RE::TESBoundObject>(xtra.form_id); };
 
-    float GetElapsed(float curr_time) const;
+    [[nodiscard]] inline float GetElapsed(float curr_time) const;
 
-    float GetDelaySlope() const;
+    [[nodiscard]] inline float GetDelaySlope() const;
 
     void SetNewStart(float curr_time, float overshot);
 
@@ -120,28 +120,28 @@ struct StageInstance {
 
     void SetTransform(float time, FormID formid);
 
-    float GetTransformElapsed(const float curr_time) const { return GetElapsed(curr_time) - _elapsed; }
+    [[nodiscard]] float GetTransformElapsed(const float curr_time) const { return GetElapsed(curr_time) - _elapsed; }
 
     void RemoveTransform(float curr_time);
 
     // use only for WO (e.g. HandleDrop)
     void RemoveTimeMod(float time);
 
-    float GetDelayMagnitude() const { return GetDelaySlope(); }
+    [[nodiscard]] float GetDelayMagnitude() const { return GetDelaySlope(); }
 
-    FormID GetDelayerFormID() const { return _delay_formid; }
+    [[nodiscard]] FormID GetDelayerFormID() const { return _delay_formid; }
 
-    float GetHittingTime(const float schranke) const {
+    [[nodiscard]] float GetHittingTime(const float schranke) const {
         // _elapsed + dt*_delay_mag = schranke
         return _delay_start + (schranke - _elapsed) / (GetDelaySlope() + std::numeric_limits<float>::epsilon());
-    };
+    }
 
-    float GetTransformHittingTime(const float schranke) const{
+    [[nodiscard]] float GetTransformHittingTime(const float schranke) const{
         if (!xtra.is_transforming) return 0;
 		return GetHittingTime(schranke+_elapsed);
     }
 
-    StageInstancePlain GetPlain() const;
+    [[nodiscard]] StageInstancePlain GetPlain() const;
 
     void SetDelay(const StageInstancePlain& plain);
 
@@ -160,9 +160,9 @@ struct StageUpdate {
     Duration update_time=0;
     bool new_is_fake=false;
 
-    StageUpdate(const Stage* old, const Stage* new_, Count c, 
-        Duration u_t,
-        bool fake)
+    StageUpdate(const Stage* old, const Stage* new_, const Count c,
+        const Duration u_t,
+        const bool fake)
 		: oldstage(old), newstage(new_), count(c), 
         update_time(u_t), 
         new_is_fake(fake) {}

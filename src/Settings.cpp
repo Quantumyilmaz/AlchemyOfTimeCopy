@@ -151,7 +151,7 @@ DefaultSettings parseDefaults_(const YAML::Node& config)
                                         : GetFormEditorIDFromString(temp_formeditorid);
         if (!temp_formid && !temp_formeditorid.empty()) {
             logger::error("Formid could not be obtained for {}", temp_formid, temp_formeditorid);
-            return DefaultSettings();
+            return {};
         }
         // add to items
         logger::trace("Formid");
@@ -218,7 +218,7 @@ DefaultSettings parseDefaults_(const YAML::Node& config)
 			: 0;
     if (!temp_decayed_id) {
         logger::error("Decayed id is 0.");
-        return DefaultSettings();
+        return {};
     }
     logger::trace("Decayed id: {}", temp_decayed_id);
     settings.decayed_id = temp_decayed_id;

@@ -161,8 +161,10 @@ private:
 
     void SetDelayOfInstances(float some_time, RE::TESObjectREFR* inventory_owner);
 
-    void SetDelayOfInstance(StageInstance& instance, float curr_time,
-                             RE::TESObjectREFR* inventory_owner) const;
+    void SetDelayOfInstance(StageInstance& instance, float curr_time, RE::TESObjectREFR* inventory_owner) const;
+
+    void SetDelayOfInstance(StageInstance& instance, float a_time, FormID a_transformer, FormID a_delayer, const std::vector<StageNo>&
+                            allowed_stages) const;
    
     [[nodiscard]] bool CheckIntegrity();
 

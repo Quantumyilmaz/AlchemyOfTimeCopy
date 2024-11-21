@@ -43,13 +43,7 @@ float StageInstance::GetElapsed(const float curr_time) const {
 }
 
 float StageInstance::GetDelaySlope() const {
-    const auto delay_magnitude = std::min(std::max(-1000.f, _delay_mag), 1000.f);
-    //if (std::abs(delay_magnitude) < 0.0001f) {
-    //    // If the delay slope is too close to 0, return a small non-zero value
-    //    return delay_magnitude < 0 ? -0.0001f : 0.0001f;
-    //}
-
-    return delay_magnitude;
+    return std::min(std::max(-1000.f, _delay_mag), 1000.f);
 }
 
 void StageInstance::SetNewStart(const float curr_time, const float overshot)
@@ -79,7 +73,8 @@ void StageInstance::SetTransform(const float time, const FormID formid)
         if (_delay_formid != formid) {
             RemoveTransform(time);
             return SetTransform(time, formid);
-        } else return;
+        }
+        return;
     } 
     SetDelay(time, 1, formid);
     xtra.is_transforming = true;

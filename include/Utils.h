@@ -59,7 +59,7 @@ void FavoriteItem(const RE::TESBoundObject* item, RE::TESObjectREFR* inventory_o
 
 [[nodiscard]] bool IsFavorited(RE::TESBoundObject* item, RE::TESObjectREFR* inventory_owner);
 
-[[nodiscard]] inline bool IsFavorited(RE::FormID formid, RE::FormID refid) {
+[[nodiscard]] inline bool IsFavorited(const RE::FormID formid, const RE::FormID refid) {
     return IsFavorited(GetFormByID<RE::TESBoundObject>(formid),GetFormByID<RE::TESObjectREFR>(refid));
 }
 
@@ -73,7 +73,7 @@ inline void FavoriteItem(const FormID formid, const FormID refid) {
 
 void EquipItem(const RE::TESBoundObject* item, bool unequip = false);
 
-inline void EquipItem(const FormID formid, bool unequip = false) {
+inline void EquipItem(const FormID formid, const bool unequip = false) {
 	EquipItem(GetFormByID<RE::TESBoundObject>(formid), unequip);
 }
 
@@ -105,7 +105,7 @@ namespace Types {
 
     struct FormEditorID {
         FormID form_id=0;
-        std::string editor_id = "";
+        std::string editor_id;
 
         bool operator<(const FormEditorID& other) const;
     };
@@ -361,7 +361,7 @@ namespace Menu {
 
     template <typename T>
     void UpdateItemList() {
-        if (auto ui = RE::UI::GetSingleton(); ui->IsMenuOpen(T::MENU_NAME)) {
+        if (const auto ui = RE::UI::GetSingleton(); ui->IsMenuOpen(T::MENU_NAME)) {
             if (auto inventory_menu = ui->GetMenu<T>()) {
                 if (auto itemlist = inventory_menu->GetRuntimeData().itemList) {
                     //logger::trace("Updating itemlist.");
@@ -426,18 +426,18 @@ struct FormTraits {
 
 template <>
 struct FormTraits<RE::AlchemyItem> {
-    static float GetWeight(RE::AlchemyItem* form) { 
+    static float GetWeight(const RE::AlchemyItem* form) { 
         return form->weight;
     }
 
-    static void SetWeight(RE::AlchemyItem* form, float weight) { 
+    static void SetWeight(RE::AlchemyItem* form, const float weight) { 
         form->weight = weight;
     }
 
-    static int GetValue(RE::AlchemyItem* form) {
+    static int GetValue(const RE::AlchemyItem* form) {
         return form->GetGoldValue();
     }
-    static void SetValue(RE::AlchemyItem* form, int value) { 
+    static void SetValue(RE::AlchemyItem* form, const int value) { 
         logger::trace("CostOverride: {}", form->data.costOverride);
         form->data.costOverride = value;
     }
@@ -449,18 +449,18 @@ struct FormTraits<RE::AlchemyItem> {
 
 template <>
 struct FormTraits<RE::IngredientItem> {
-	static float GetWeight(RE::IngredientItem* form) { 
+	static float GetWeight(const RE::IngredientItem* form) { 
 		return form->weight;
 	}
 
-	static void SetWeight(RE::IngredientItem* form, float weight) { 
+	static void SetWeight(RE::IngredientItem* form, const float weight) { 
 		form->weight = weight;
 	}
 
-	static int GetValue(RE::IngredientItem* form) {
+	static int GetValue(const RE::IngredientItem* form) {
 		return form->GetGoldValue();
 	}
-	static void SetValue(RE::IngredientItem* form, int value) { 
+	static void SetValue(RE::IngredientItem* form, const int value) { 
 		form->value = value;
 	}
 
@@ -471,7 +471,7 @@ struct FormTraits<RE::IngredientItem> {
         
 template <>
 struct FormTraits<RE::TESAmmo> {
-    static float GetWeight(RE::TESAmmo* form) {
+    static float GetWeight(const RE::TESAmmo* form) {
         // Default implementation, assuming T has a member variable 'weight'
         return form->GetWeight();
     }
@@ -481,12 +481,12 @@ struct FormTraits<RE::TESAmmo> {
         return;
     }
 
-    static int GetValue(RE::TESAmmo* form) {
+    static int GetValue(const RE::TESAmmo* form) {
         // Default implementation, assuming T has a member variable 'value'
         return form->value;
     }
 
-    static void SetValue(RE::TESAmmo* form, int value) { form->value = value; }
+    static void SetValue(RE::TESAmmo* form, const int value) { form->value = value; }
 
     static RE::BSTArray<RE::Effect*> GetEffects(RE::TESAmmo*) {
         RE::BSTArray<RE::Effect*> effects;
