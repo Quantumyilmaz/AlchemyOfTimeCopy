@@ -28,12 +28,13 @@ void Ticker::RunLoop()
         runnerThread.detach();
 
         m_IntervalMutex.lock();
-        std::chrono::milliseconds interval;
-        if (m_Interval >= std::chrono::milliseconds(3000)) {
-            interval = m_Interval;
-		} else {
-            interval = std::chrono::milliseconds(3000);
-        }
+  //      std::chrono::milliseconds interval;
+  //      if (m_Interval >= std::chrono::milliseconds(3000)) {
+  //          interval = m_Interval;
+		//} else {
+  //          interval = std::chrono::milliseconds(3000);
+  //      }
+		std::chrono::milliseconds interval = m_Interval;
         m_IntervalMutex.unlock();
         std::this_thread::sleep_for(interval);
     }

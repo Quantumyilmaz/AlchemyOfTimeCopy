@@ -470,7 +470,7 @@ inline FormID Source::GetModulatorInWorld(const RE::TESObjectREFR* wo) const
 		return 0;
 	}
 	FormID modulator_formid = 0;
-	const auto candidates = defaultsettings->delayers_order;
+	const auto& candidates = defaultsettings->delayers_order;
     cell->ForEachReferenceInRange(wo->GetPosition(),Settings::proximity_radius,
 		[&modulator_formid,&candidates](RE::TESObjectREFR* ref)-> RE::BSContainer::ForEachResult {
 			if (!ref || ref->IsDisabled() || ref->IsDeleted() || ref->IsMarkedForDeletion()) return RE::BSContainer::ForEachResult::kContinue;
@@ -510,7 +510,7 @@ inline FormID Source::GetTransformerInWorld(const RE::TESObjectREFR* wo) const
 		return 0;
 	}
 	FormID transformer_formid = 0;
-    const auto candidates = defaultsettings->transformers_order;
+    const auto& candidates = defaultsettings->transformers_order;
 	cell->ForEachReferenceInRange(wo->GetPosition(), Settings::proximity_radius,
 		[&transformer_formid, &candidates](RE::TESObjectREFR* ref)-> RE::BSContainer::ForEachResult {
 			if (!ref || ref->IsDisabled() || ref->IsDeleted() || ref->IsMarkedForDeletion()) return RE::BSContainer::ForEachResult::kContinue;
@@ -563,12 +563,7 @@ void Source::UpdateTimeModulationInInventory(RE::TESObjectREFR* inventory_owner,
 
 void Source::UpdateTimeModulationInWorld(RE::TESObjectREFR* wo, StageInstance& wo_inst, const float _time) const
 {
-	const auto delayer_before = wo_inst.GetDelayerFormID();
     SetDelayOfInstance(wo_inst, _time, wo, false);
-	const auto delayer_after = wo_inst.GetDelayerFormID();
-	if (delayer_before != delayer_after) {
-		logger::trace("delayer changed from {} to {}", delayer_before, delayer_after);
-	}
 }
 
 float Source::GetNextUpdateTime(StageInstance* st_inst) {

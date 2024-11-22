@@ -1,4 +1,5 @@
 #include "Settings.h"
+#include <utility>
 #include "SimpleIni.h"
 
 
@@ -92,12 +93,9 @@ bool Settings::IsItem(const FormID formid, std::string type, const bool check_ex
 }
 
 bool Settings::IsItem(const RE::TESObjectREFR* ref, std::string type) {
-    if (!ref) return false;
-    if (ref->IsDisabled()) return false;
-    if (ref->IsDeleted()) return false;
     const auto base = ref->GetBaseObject();
     if (!base) return false;
-    return IsItem(base->GetFormID(),type);
+    return IsItem(base->GetFormID(),std::move(type));
 }
 
 std::vector<std::string> LoadExcludeList(const std::string& postfix)

@@ -6,7 +6,7 @@ public:
     virtual ~Ticker() = default;
 
     Ticker(const std::function<void()>& onTick, const std::chrono::milliseconds interval)
-        : m_OnTick(onTick), m_Interval(interval), m_Running(false), m_ThreadActive(false) {}
+        : m_OnTick(onTick), m_Interval(interval), m_ThreadActive(false), m_Running(false) {}
 
     void Start();
 

@@ -81,7 +81,7 @@ public:
         Init();
     };
 
-    static Manager* GetSingleton(const std::vector<Source>& data, const int u_intervall = 3000) {
+    static Manager* GetSingleton(const std::vector<Source>& data, const int u_intervall = Settings::ticker_invterval) {
         static Manager singleton(data, std::chrono::milliseconds(u_intervall));
         return &singleton;
     }

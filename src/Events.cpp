@@ -104,8 +104,15 @@ RE::BSEventNotifyControl OurEventSink::ProcessEvent(const SKSE::CrosshairRefEven
 	//if (event->crosshairRef->HasContainer()) M->Update(event->crosshairRef.get());
     /*else HandleWO(event->crosshairRef.get());*/
 
+	const auto curr_time = RE::Calendar::GetSingleton()->GetHoursPassed();
+	if (last_crosshair_ref_update.first == event->crosshairRef->GetFormID()) {
+		if (curr_time - last_crosshair_ref_update.second < min_last_crosshair_update_time) return RE::BSEventNotifyControl::kContinue;
+    }
+
     if (!event->crosshairRef->HasContainer()) HandleWO(event->crosshairRef.get());
 	else if (M->RefIsRegistered(event->crosshairRef->GetFormID())) M->Update(event->crosshairRef.get());
+
+	last_crosshair_ref_update = { event->crosshairRef->GetFormID(), curr_time};
         
     return RE::BSEventNotifyControl::kContinue;
 }

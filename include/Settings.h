@@ -30,7 +30,8 @@ namespace Settings {
     inline int nForgettingTime = 2160;  // in hours
     inline bool disable_warnings = false;
     inline bool world_objects_evolve = false;
-    inline float proximity_radius = 200.f;
+    inline float proximity_radius = 500.f;
+    constexpr float ticker_invterval = 300.f;
 
 
 
