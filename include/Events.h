@@ -30,6 +30,9 @@ class OurEventSink final : public RE::BSTEventSink<RE::TESEquipEvent>,
     bool furniture_entered = false;
     RE::NiPointer<RE::TESObjectREFR> furniture = nullptr;
 
+	const float min_last_crosshair_update_time = 0.0003f;
+	std::pair<RefID, float> last_crosshair_ref_update = { 0,0.f };
+
     void HandleWO(RE::TESObjectREFR* ref) const;
 
 public:
