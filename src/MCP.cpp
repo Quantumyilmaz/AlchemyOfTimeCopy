@@ -542,14 +542,13 @@ void UI::UpdateStages(const std::vector<Source>& sources)
 		}
 		const auto& stage = source.GetDecayedStage();
         if (const auto* temp_form = RE::TESForm::LookupByID(stage.formid)) {
-			const GameObject item = { temp_form->GetName(),stage.formid };
+			const GameObject item = { .name= temp_form->GetName(),.formid= stage.formid };
 			temp_stages.insert(Stage(item, "Final", 0.f, source.IsFakeStage(max_stage_no), stage.crafting_allowed, max_stage_no));
 		}
         std::set<GameObject> containers_;
 		for (const auto& container : source.defaultsettings->containers) {
 			const auto temp_formid = container;
-			const auto temp_form = RE::TESForm::LookupByID(temp_formid);
-			const auto temp_name = temp_form ? temp_form->GetName() : std::format("{:x}", temp_formid);
+			const auto temp_name = GetName(temp_formid);
 			containers_.insert(GameObject{ temp_name,temp_formid });
 		}
 
@@ -558,12 +557,10 @@ void UI::UpdateStages(const std::vector<Source>& sources)
 		std::map<FormID,Duration> transform_durations_;
 		for (const auto& [fst, snd] : source.defaultsettings->transformers) {
 			auto temp_formid = fst;
-            const auto temp_form = RE::TESForm::LookupByID(temp_formid);
-            const auto temp_name = temp_form ? temp_form->GetName() : std::format("{:x}", temp_formid);
+			const auto temp_name = GetName(temp_formid);
 			transformers_.insert(GameObject{ temp_name,temp_formid });
 			const auto temp_formid2 = std::get<0>(snd);
-			const auto temp_form2 = RE::TESForm::LookupByID(temp_formid2);
-			const auto temp_name2 = temp_form2 ? temp_form2->GetName() : std::format("{:x}", temp_formid2);
+			auto temp_name2 = GetName(temp_formid2);
 			transformer_enditems_[temp_formid] = GameObject{ temp_name2,temp_formid2 };
 			transform_durations_[temp_formid] = std::get<1>(snd);
 		}
@@ -610,4 +607,13 @@ void UI::RefreshButton()
 
     ImGui::SameLine();
     ImGui::Text(("Last Generated: " + last_generated).c_str());
+}
+
+std::string UI::GetName(FormID formid)
+{
+    const auto temp_form = RE::TESForm::LookupByID(formid);
+    auto temp_name = temp_form ? temp_form->GetName() : std::format("{:x}", formid);
+	if (temp_name.empty()) temp_name = clib_util::editorID::get_editorID(temp_form);
+	if (temp_name.empty()) temp_name = "???";
+	return temp_name;
 }

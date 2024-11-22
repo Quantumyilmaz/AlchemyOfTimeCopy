@@ -300,8 +300,7 @@ bool Source::InitInsertInstanceInventory(const StageNo n, const Count c, RE::TES
 		return false;
 	}
         
-    SetDelayOfInstance(data[inventory_owner_refid].back(), t_0,
-                        inventory_owner);
+    SetDelayOfInstance(data[inventory_owner_refid].back(), t_0, inventory_owner);
     return true;
 }
 
@@ -462,6 +461,35 @@ inline FormID Source::GetModulatorInInventory(RE::TESObjectREFR* inventory_owner
     return 0;
 }
 
+inline FormID Source::GetModulatorInWorld(const RE::TESObjectREFR* wo) const
+{
+	// idea: scan proximity for the modulators
+	const auto cell = wo->GetParentCell();
+	if (!cell) {
+		logger::error("WO cell is null.");
+		return 0;
+	}
+	FormID modulator_formid = 0;
+	const auto candidates = defaultsettings->delayers_order;
+    cell->ForEachReferenceInRange(wo->GetPosition(),Settings::proximity_radius,
+		[&modulator_formid,&candidates](RE::TESObjectREFR* ref)-> RE::BSContainer::ForEachResult {
+			if (!ref || ref->IsDisabled() || ref->IsDeleted() || ref->IsMarkedForDeletion()) return RE::BSContainer::ForEachResult::kContinue;
+			const auto form_id = ref->GetObjectReference()->GetFormID();
+            if (!form_id) return RE::BSContainer::ForEachResult::kContinue;
+			for (const auto& dlyr_fid : candidates) {
+                if (form_id == dlyr_fid) {
+					modulator_formid = dlyr_fid;
+					logger::trace("Modulator found: {:x}", modulator_formid);
+					return RE::BSContainer::ForEachResult::kStop;
+				}
+			}
+			return RE::BSContainer::ForEachResult::kContinue;
+		}
+    );
+
+    return modulator_formid;
+}
+
 inline FormID Source::GetTransformerInInventory(RE::TESObjectREFR* inventory_owner) const {
     const auto inventory = inventory_owner->GetInventory();
 	for (const auto& trns_fid : defaultsettings->transformers_order) {
@@ -471,6 +499,34 @@ inline FormID Source::GetTransformerInInventory(RE::TESObjectREFR* inventory_own
 		}
 	}
 	return 0;
+}
+
+inline FormID Source::GetTransformerInWorld(const RE::TESObjectREFR* wo) const
+{
+	// idea: scan proximity for the transformers
+	const auto cell = wo->GetParentCell();
+	if (!cell) {
+		logger::error("WO cell is null.");
+		return 0;
+	}
+	FormID transformer_formid = 0;
+    const auto candidates = defaultsettings->transformers_order;
+	cell->ForEachReferenceInRange(wo->GetPosition(), Settings::proximity_radius,
+		[&transformer_formid, &candidates](RE::TESObjectREFR* ref)-> RE::BSContainer::ForEachResult {
+			if (!ref || ref->IsDisabled() || ref->IsDeleted() || ref->IsMarkedForDeletion()) return RE::BSContainer::ForEachResult::kContinue;
+			const auto form_id = ref->GetObjectReference()->GetFormID();
+			if (!form_id) return RE::BSContainer::ForEachResult::kContinue;
+			for (const auto& trns_fid : candidates) {
+				if (form_id == trns_fid) {
+					transformer_formid = trns_fid;
+					logger::trace("Transformer found: {:x}", transformer_formid);
+					return RE::BSContainer::ForEachResult::kStop;
+				}
+			}
+			return RE::BSContainer::ForEachResult::kContinue;
+		}
+	);
+	return transformer_formid;
 }
 
 void Source::UpdateTimeModulationInInventory(RE::TESObjectREFR* inventory_owner, const float _time)
@@ -503,6 +559,16 @@ void Source::UpdateTimeModulationInInventory(RE::TESObjectREFR* inventory_owner,
     }
 
     SetDelayOfInstances(_time, inventory_owner);
+}
+
+void Source::UpdateTimeModulationInWorld(RE::TESObjectREFR* wo, StageInstance& wo_inst, const float _time) const
+{
+	const auto delayer_before = wo_inst.GetDelayerFormID();
+    SetDelayOfInstance(wo_inst, _time, wo, false);
+	const auto delayer_after = wo_inst.GetDelayerFormID();
+	if (delayer_before != delayer_after) {
+		logger::trace("delayer changed from {} to {}", delayer_before, delayer_after);
+	}
 }
 
 float Source::GetNextUpdateTime(StageInstance* st_inst) {
@@ -818,15 +884,15 @@ void Source::SetDelayOfInstances(const float some_time, RE::TESObjectREFR* inven
 	}
 }
 
-void Source::SetDelayOfInstance(StageInstance& instance, const float curr_time, RE::TESObjectREFR* inventory_owner) const {
+void Source::SetDelayOfInstance(StageInstance& instance, const float curr_time, RE::TESObjectREFR* a_object, const bool inventory_owner) const {
     if (instance.count <= 0) return;
-    if (ShouldFreezeEvolution(inventory_owner->GetBaseObject()->GetFormID())) {
+    if (ShouldFreezeEvolution(a_object->GetBaseObject()->GetFormID())) {
 		instance.RemoveTimeMod(curr_time);
 		instance.SetDelay(curr_time, 0, 0); // freeze
         return;
     }
-    const auto transformer_best = GetTransformerInInventory(inventory_owner);
-    const auto delayer_best = GetModulatorInInventory(inventory_owner);
+	const auto transformer_best = inventory_owner ? GetTransformerInInventory(a_object) : GetTransformerInWorld(a_object);
+	const auto delayer_best = inventory_owner ? GetModulatorInInventory(a_object) : GetModulatorInWorld(a_object);
     std::vector<StageNo> allowed_stages;
 	if (transformer_best && defaultsettings->transformers.contains(transformer_best)) {
         allowed_stages = std::get<2>(defaultsettings->transformers[transformer_best]);

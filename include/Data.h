@@ -63,10 +63,16 @@ struct Source {
 
     FormID inline GetModulatorInInventory(RE::TESObjectREFR* inventory_owner) const;
 
+    FormID inline GetModulatorInWorld(const RE::TESObjectREFR* wo) const;
+
     inline FormID GetTransformerInInventory(RE::TESObjectREFR* inventory_owner) const;
+
+    inline FormID GetTransformerInWorld(const RE::TESObjectREFR* wo) const;
 
     // always update before doing this
     void UpdateTimeModulationInInventory(RE::TESObjectREFR* inventory_owner, float _time);
+
+    void UpdateTimeModulationInWorld(RE::TESObjectREFR* wo, StageInstance& wo_inst, float _time) const;
 
     float GetNextUpdateTime(StageInstance* st_inst);
 
@@ -164,7 +170,7 @@ private:
 
     void SetDelayOfInstances(float some_time, RE::TESObjectREFR* inventory_owner);
 
-    void SetDelayOfInstance(StageInstance& instance, float curr_time, RE::TESObjectREFR* inventory_owner) const;
+    void SetDelayOfInstance(StageInstance& instance, float curr_time, RE::TESObjectREFR* a_object, bool inventory_owner=true) const;
 
     void SetDelayOfInstance(StageInstance& instance, float a_time, FormID a_transformer, FormID a_delayer, const std::vector<StageNo>&
                             allowed_stages) const;
@@ -188,7 +194,7 @@ private:
 
         if (const auto stage_form = GetFormByID<T>(new_formid)) {
             RegisterStage(new_formid, st_no);
-            if (auto it = stages.find(st_no); it == stages.end()) {
+            if (const auto it = stages.find(st_no); it == stages.end()) {
                 logger::error("Stage {} not found in stages.", st_no);
                 DFT->Delete(new_formid);
                 return 0;

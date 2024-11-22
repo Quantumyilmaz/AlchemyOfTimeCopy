@@ -36,6 +36,13 @@ void Manager::UpdateLoop()
 
 
     if (const auto ui = RE::UI::GetSingleton(); ui && ui->GameIsPaused()) return listen_woupdate.store(true);
+
+	// new mechanic: WO can also be affected by time modulators
+	// Update _ref_stops_ with the new times
+    for (auto& fst : _ref_stops_ | std::views::keys) {
+		if (const auto ref = RE::TESForm::LookupByID<RE::TESObjectREFR>(fst); ref) Update(ref);
+    }
+
     if (const auto cal = RE::Calendar::GetSingleton()) WoUpdateLoop(cal->GetHoursPassed(),_ref_stops_);
     
     listen_woupdate.store(true);
@@ -614,9 +621,10 @@ void Manager::UpdateWO(RE::TESObjectREFR* ref)
         }
 
         auto& wo_inst = src.data.at(refid).front();
-        wo_inst.RemoveTimeMod(curr_time); // handledrop. eer daa onceden removedsa bisey yapmiyo zaten
-		if (!src.defaultsettings->containers.empty()) wo_inst.SetDelay(curr_time, 0, 0);
+  //      wo_inst.RemoveTimeMod(curr_time); // handledrop. eer daa onceden removedsa bisey yapmiyo zaten
+		//if (!src.defaultsettings->containers.empty()) wo_inst.SetDelay(curr_time, 0, 0);
         if (wo_inst.xtra.is_fake) ApplyStageInWorld(ref, src.GetStage(wo_inst.no), src.GetBoundObject());
+        src.UpdateTimeModulationInWorld(ref,wo_inst,curr_time);
         if (const auto next_update = src.GetNextUpdateTime(&wo_inst); next_update > curr_time) QueueWOUpdate(refid, next_update);
 		break;
     }

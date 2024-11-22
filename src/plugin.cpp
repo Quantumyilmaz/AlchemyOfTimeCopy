@@ -22,7 +22,7 @@ void OnMessage(SKSE::MessagingInterface::Message* message) {
         }
 
 		// 3) Initialize Manager
-        auto sources = std::vector<Source>();
+        const auto sources = std::vector<Source>();
         M = Manager::GetSingleton(sources);
         if (!M) return;
         

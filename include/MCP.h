@@ -100,4 +100,6 @@ namespace UI {
 	void UpdateStages(const std::vector<Source>& sources);
     void RefreshButton();
 
+    std::string GetName(FormID formid);
+
 };
