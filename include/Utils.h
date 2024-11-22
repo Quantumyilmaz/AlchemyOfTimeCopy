@@ -38,9 +38,9 @@ static T* GetFormByID(const RE::FormID id, const std::string& editor_id="") {
     return nullptr;
 };
 
-const std::string GetEditorID(const FormID a_formid);
+std::string GetEditorID(const FormID a_formid);
 
-FormID GetFormEditorIDFromString(const std::string formEditorId);
+FormID GetFormEditorIDFromString(const std::string& formEditorId);
 
 inline bool FormIsOfType(const RE::TESForm* form, RE::FormType type);
 
@@ -50,8 +50,8 @@ bool IsPoisonItem(const RE::TESForm* form);
 
 bool IsMedicineItem(const RE::TESForm* form);
 
-void OverrideMGEFFs(RE::BSTArray<RE::Effect*>& effect_array, std::vector<FormID> new_effects,
-                            std::vector<uint32_t> durations, std::vector<float> magnitudes);
+void OverrideMGEFFs(RE::BSTArray<RE::Effect*>& effect_array, const std::vector<FormID>& new_effects,
+                            const std::vector<uint32_t>& durations, const std::vector<float>& magnitudes);
 
 inline bool IsDynamicFormID(const FormID a_formID) { return a_formID >= 0xFF000000; }
 

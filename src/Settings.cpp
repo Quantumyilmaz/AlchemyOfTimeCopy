@@ -222,6 +222,18 @@ DefaultSettings parseDefaults_(const YAML::Node& config)
     }
     logger::trace("Decayed id: {}", temp_decayed_id);
     settings.decayed_id = temp_decayed_id;
+
+    // containers
+    logger::trace("containers");
+    if (config["containers"] && !config["containers"].IsNull()) {
+		const auto temp_containers = config["containers"].IsScalar() ? std::vector{config["containers"].as<std::string>()} : config["containers"].as<std::vector<std::string>>();
+		for (const auto& container : temp_containers) {
+			if (const FormID temp_formid = GetFormEditorIDFromString(container)) {
+				settings.containers.insert(temp_formid);
+			}
+		}
+    } 
+
     // delayers
     logger::trace("timeModulators");
     for (const auto& modulator : config["timeModulators"]) {
@@ -229,15 +241,23 @@ DefaultSettings parseDefaults_(const YAML::Node& config)
                                             ? modulator["FormEditorID"].as<std::string>()
                                             : "";
         const FormID temp_formid = GetFormEditorIDFromString(temp_formeditorid);
+		if (!temp_formid) {
+			logger::warn("timeModulators: Formid is 0 for {}", temp_formeditorid);
+			continue;
+		}
         settings.delayers[temp_formid] = !modulator["magnitude"].IsNull() ? modulator["magnitude"].as<float>() : 1;
 		settings.delayers_order.push_back(temp_formid);
     }
 
+	// transformers
     for (const auto& transformer : config["transformers"]) {
         const auto temp_formeditorid = transformer["FormEditorID"] &&
                                         !transformer["FormEditorID"].IsNull() ? transformer["FormEditorID"].as<std::string>() : "";
         const FormID temp_formid = GetFormEditorIDFromString(temp_formeditorid);
-
+		if (!temp_formid) {
+			logger::warn("Transformer Formid is 0 for {}", temp_formeditorid);
+			continue;
+		}
         const auto temp_finalFormEditorID =
             transformer["finalFormEditorID"] &&
             !transformer["finalFormEditorID"].IsNull() ? transformer["finalFormEditorID"].as<std::string>() : "";
@@ -268,9 +288,7 @@ DefaultSettings parseDefaults_(const YAML::Node& config)
 		settings.transformers_order.push_back(temp_formid);
     }
         
-    if (!settings.CheckIntegrity()) {
-		logger::critical("Settings integrity check failed.");
-	}
+    if (!settings.CheckIntegrity()) logger::critical("Settings integrity check failed.");
 
     return settings;
 }

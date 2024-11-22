@@ -193,7 +193,7 @@ void __stdcall UI::RenderUpdateQ()
 		ImGui::TableSetupColumn("Name");
 		ImGui::TableSetupColumn("Update Time");
 		ImGui::TableHeadersRow();
-		for (const auto& [formid, name_stop_time] : update_q) {
+		for (const auto& name_stop_time : update_q | std::views::values) {
 			ImGui::TableNextRow();
 			ImGui::TableNextColumn();
 			ImGui::Text(name_stop_time.first.c_str());
@@ -283,6 +283,19 @@ void __stdcall UI::RenderStages()
 			ImGui::TableNextColumn();
 			ImGui::Text(stage.is_fake ? "Yes" : "No");
 
+		}
+		ImGui::EndTable();
+	}
+
+    ImGui::Text("");
+    ImGui::Text("Containers");
+	if (ImGui::BeginTable("table_containers", 1, table_flags)) {
+		ImGui::TableSetupColumn("Container (FormID)");
+		ImGui::TableHeadersRow();
+		for (const auto& [name, formid] : src.containers) {
+			ImGui::TableNextRow();
+			ImGui::TableNextColumn();
+			ImGui::Text((name + std::format(" ({:x})", formid)).c_str());
 		}
 		ImGui::EndTable();
 	}
@@ -522,43 +535,50 @@ void UI::UpdateStages(const std::vector<Source>& sources)
             if (const auto* stage = source.GetStageSafe(max_stage_no)) {
 				const auto* temp_form = RE::TESForm::LookupByID(stage->formid);
 				if (!temp_form) continue;
-                const GameItem item = {temp_form->GetName(),stage->formid};
+                const GameObject item = {temp_form->GetName(),stage->formid};
 				temp_stages.insert(Stage(item, stage->name, stage->duration, source.IsFakeStage(max_stage_no), stage->crafting_allowed,max_stage_no));
 			}
 			max_stage_no++;
 		}
 		const auto& stage = source.GetDecayedStage();
         if (const auto* temp_form = RE::TESForm::LookupByID(stage.formid)) {
-			const GameItem item = { temp_form->GetName(),stage.formid };
+			const GameObject item = { temp_form->GetName(),stage.formid };
 			temp_stages.insert(Stage(item, "Final", 0.f, source.IsFakeStage(max_stage_no), stage.crafting_allowed, max_stage_no));
 		}
+        std::set<GameObject> containers_;
+		for (const auto& container : source.defaultsettings->containers) {
+			const auto temp_formid = container;
+			const auto temp_form = RE::TESForm::LookupByID(temp_formid);
+			const auto temp_name = temp_form ? temp_form->GetName() : std::format("{:x}", temp_formid);
+			containers_.insert(GameObject{ temp_name,temp_formid });
+		}
 
-        std::set<GameItem> transformers_;
-		std::map<FormID,GameItem> transformer_enditems_;
+        std::set<GameObject> transformers_;
+		std::map<FormID,GameObject> transformer_enditems_;
 		std::map<FormID,Duration> transform_durations_;
 		for (const auto& [fst, snd] : source.defaultsettings->transformers) {
 			auto temp_formid = fst;
             const auto temp_form = RE::TESForm::LookupByID(temp_formid);
             const auto temp_name = temp_form ? temp_form->GetName() : std::format("{:x}", temp_formid);
-			transformers_.insert(GameItem{ temp_name,temp_formid });
+			transformers_.insert(GameObject{ temp_name,temp_formid });
 			const auto temp_formid2 = std::get<0>(snd);
 			const auto temp_form2 = RE::TESForm::LookupByID(temp_formid2);
 			const auto temp_name2 = temp_form2 ? temp_form2->GetName() : std::format("{:x}", temp_formid2);
-			transformer_enditems_[temp_formid] = GameItem{ temp_name2,temp_formid2 };
+			transformer_enditems_[temp_formid] = GameObject{ temp_name2,temp_formid2 };
 			transform_durations_[temp_formid] = std::get<1>(snd);
 		}
-		std::set<GameItem> time_modulators_;
+		std::set<GameObject> time_modulators_;
 		std::map<FormID,float> time_modulator_multipliers_;
 		for (const auto& [fst, snd] : source.defaultsettings->delayers) {
 			auto temp_formid = fst;
 			const auto temp_form = RE::TESForm::LookupByID(temp_formid);
 			const auto temp_name = temp_form ? temp_form->GetName() : std::format("{:x}", temp_formid);
-			time_modulators_.insert(GameItem{ temp_name,temp_formid });
+			time_modulators_.insert(GameObject{ temp_name,temp_formid });
 			time_modulator_multipliers_[temp_formid] = snd;
 		}
 
 		const auto qform_type = Settings::GetQFormType(source.formid);
-		mcp_sources.push_back(MCPSource{ temp_stages,transformers_,transformer_enditems_,transform_durations_,time_modulators_,time_modulator_multipliers_,qform_type});
+		mcp_sources.push_back(MCPSource{ temp_stages,containers_,transformers_,transformer_enditems_,transform_durations_,time_modulators_,time_modulator_multipliers_,qform_type});
 	}
 }
 

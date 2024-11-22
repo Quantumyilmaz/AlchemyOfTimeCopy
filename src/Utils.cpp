@@ -114,8 +114,7 @@ bool isValidHexWithLength7or8(const char* input)
     return isValid;
 }
 
-const std::string GetEditorID(const FormID a_formid)
-{
+std::string GetEditorID(const FormID a_formid) {
     if (const auto form = RE::TESForm::LookupByID(a_formid)) {
         return clib_util::editorID::get_editorID(form);
     } else {
@@ -123,34 +122,25 @@ const std::string GetEditorID(const FormID a_formid)
     }
 }
 
-FormID GetFormEditorIDFromString(const std::string formEditorId)
+FormID GetFormEditorIDFromString(const std::string& formEditorId)
 {
     if (isValidHexWithLength7or8(formEditorId.c_str())) {
         int form_id_;
         std::stringstream ss;
         ss << std::hex << formEditorId;
         ss >> form_id_;
-        const auto temp_form = GetFormByID(form_id_, "");
-        if (temp_form)
-            return temp_form->GetFormID();
-        else {
-            logger::error("Formid is null for editorid {}", formEditorId);
-            return 0;
-        }
-    }
-    if (formEditorId.empty())
+        if (const auto temp_form = GetFormByID(form_id_, "")) return temp_form->GetFormID();
+        logger::error("Formid is null for editorid {}", formEditorId);
         return 0;
-    else if (!IsPo3Installed()) {
+    }
+    if (formEditorId.empty()) return 0;
+    if (!IsPo3Installed()) {
         logger::error("Po3 is not installed.");
         MsgBoxesNotifs::Windows::Po3ErrMsg();
         return 0;
     }
-    const auto temp_form = GetFormByID(0, formEditorId);
-    if (temp_form) return temp_form->GetFormID();
-    else {
-        //logger::info("Formid is null for editorid {}", formEditorId);
-        return 0;
-    }
+    if (const auto temp_form = GetFormByID(0, formEditorId)) return temp_form->GetFormID();
+    return 0;
 }
 
 inline bool FormIsOfType(const RE::TESForm* form, RE::FormType type)
@@ -203,12 +193,11 @@ bool IsMedicineItem(const RE::TESForm* form)
     return true;
 }
 
-void OverrideMGEFFs(RE::BSTArray<RE::Effect*>& effect_array, std::vector<FormID> new_effects, std::vector<uint32_t> durations, std::vector<float> magnitudes)
+void OverrideMGEFFs(RE::BSTArray<RE::Effect*>& effect_array, const std::vector<FormID>& new_effects, const std::vector<uint32_t>& durations, const std::vector<float>& magnitudes)
 {
     size_t some_index = 0;
     for (auto* effect : effect_array) {
-        auto* other_eff = GetFormByID<RE::EffectSetting>(new_effects[some_index]);
-        if (!other_eff){
+        if (auto* other_eff = GetFormByID<RE::EffectSetting>(new_effects[some_index]); !other_eff){
             effect->effectItem.duration = 0;
             effect->effectItem.magnitude = 0;
         }
@@ -278,7 +267,7 @@ bool IsFavorited(RE::TESBoundObject* item, RE::TESObjectREFR* inventory_owner) {
     return false;
 }
 
-void EquipItem(const RE::TESBoundObject* item, bool unequip)
+void EquipItem(const RE::TESBoundObject* item, const bool unequip)
 {
     logger::trace("EquipItem");
 
@@ -290,8 +279,7 @@ void EquipItem(const RE::TESBoundObject* item, bool unequip)
     const auto inventory_changes = player_ref->GetInventoryChanges();
     const auto entries = inventory_changes->entryList;
     for (auto it = entries->begin(); it != entries->end(); ++it) {
-        const auto formid = (*it)->object->GetFormID();
-        if (formid == item->GetFormID()) {
+        if (const auto formid = (*it)->object->GetFormID(); formid == item->GetFormID()) {
             if (!(*it) || !(*it)->extraLists) {
 				logger::error("Item extraLists is null");
 				return;

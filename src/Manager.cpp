@@ -435,10 +435,8 @@ std::set<float> Manager::GetUpdateTimes(const RE::TESObjectREFR* inventory_owner
 
         for (auto& st_inst : src.data.at(inventory_owner_refid)) {
             if (st_inst.xtra.is_decayed || !src.IsStageNo(st_inst.no)) continue;
-            if (const auto hitting_time = src.GetNextUpdateTime(&st_inst); hitting_time <= 0) {
-                logger::warn("Hitting time is 0 or less!");
-            }
-            else queued_updates.insert(hitting_time);
+            if (const auto hitting_time = src.GetNextUpdateTime(&st_inst); hitting_time > 0) queued_updates.insert(hitting_time);
+            //else logger::warn("Hitting time is 0 or less!");
         }
     }
 
@@ -617,6 +615,7 @@ void Manager::UpdateWO(RE::TESObjectREFR* ref)
 
         auto& wo_inst = src.data.at(refid).front();
         wo_inst.RemoveTimeMod(curr_time); // handledrop. eer daa onceden removedsa bisey yapmiyo zaten
+		if (!src.defaultsettings->containers.empty()) wo_inst.SetDelay(curr_time, 0, 0);
         if (wo_inst.xtra.is_fake) ApplyStageInWorld(ref, src.GetStage(wo_inst.no), src.GetBoundObject());
         if (const auto next_update = src.GetNextUpdateTime(&wo_inst); next_update > curr_time) QueueWOUpdate(refid, next_update);
 		break;

@@ -30,7 +30,7 @@ struct Stage {
     bool crafting_allowed;
 
 
-    Stage(){};
+    Stage(){}
     Stage(const FormID f, const Duration d, const StageNo s, StageName n, const bool ca, const std::vector<StageEffect>& e)
         : formid(f), duration(d), no(s), name(std::move(n)), mgeffect(e) ,crafting_allowed(ca) {
         if (!formid) logger::critical("FormID is null");
@@ -56,7 +56,7 @@ struct Stage {
 
     [[nodiscard]] bool CheckIntegrity() const;
 
-    [[nodiscard]] inline const char* GetExtraText() const { return GetBound()->GetName(); }
+    [[nodiscard]] const char* GetExtraText() const { return GetBound()->GetName(); }
 
 };
 
@@ -124,7 +124,6 @@ struct StageInstance {
 
     void RemoveTransform(float curr_time);
 
-    // use only for WO (e.g. HandleDrop)
     void RemoveTimeMod(float time);
 
     [[nodiscard]] float GetDelayMagnitude() const { return GetDelaySlope(); }
@@ -179,6 +178,7 @@ struct DefaultSettings {
     std::vector<StageNo> numbers = {};
     FormID decayed_id = 0;
 
+    std::set<FormID> containers;
     std::map<FormID,float> delayers;
     std::vector<FormID> delayers_order;
     std::map<FormID, std::tuple<FormID, Duration, std::vector<StageNo>>> transformers;

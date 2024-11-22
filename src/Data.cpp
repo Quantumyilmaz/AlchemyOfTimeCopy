@@ -523,7 +523,7 @@ float Source::GetNextUpdateTime(StageInstance* st_inst) {
 
     const auto delay_slope = st_inst->GetDelaySlope();
     if (std::abs(delay_slope) < EPSILON) {
-		logger::warn("Delay slope is 0.");
+		//logger::warn("Delay slope is 0.");
 		return 0;
     }
 
@@ -796,6 +796,14 @@ void Source::SetDelayOfInstances(const float some_time, RE::TESObjectREFR* inven
         logger::error("Location {} does not exist.", loc);
         return;
     }
+    if (ShouldFreezeEvolution(inventory_owner->GetBaseObject()->GetFormID())) {
+		for (auto& instance : data.at(loc)) {
+	        if (instance.count <= 0) continue;
+			instance.RemoveTimeMod(some_time);
+			instance.SetDelay(some_time, 0, 0); // freeze
+        }
+        return;
+    }
 
     const auto transformer_best = GetTransformerInInventory(inventory_owner);
     const auto delayer_best = GetModulatorInInventory(inventory_owner);
@@ -812,6 +820,11 @@ void Source::SetDelayOfInstances(const float some_time, RE::TESObjectREFR* inven
 
 void Source::SetDelayOfInstance(StageInstance& instance, const float curr_time, RE::TESObjectREFR* inventory_owner) const {
     if (instance.count <= 0) return;
+    if (ShouldFreezeEvolution(inventory_owner->GetBaseObject()->GetFormID())) {
+		instance.RemoveTimeMod(curr_time);
+		instance.SetDelay(curr_time, 0, 0); // freeze
+        return;
+    }
     const auto transformer_best = GetTransformerInInventory(inventory_owner);
     const auto delayer_best = GetModulatorInInventory(inventory_owner);
     std::vector<StageNo> allowed_stages;

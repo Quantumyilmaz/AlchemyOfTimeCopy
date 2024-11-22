@@ -1,6 +1,5 @@
 #pragma once
 #include <algorithm>
-
 #include "DynamicFormTracker.h"
 
 struct Source {
@@ -82,6 +81,10 @@ struct Source {
 	}
 
 	[[nodiscard]] const Stage& GetDecayedStage() const { return decayed_stage; }
+
+	[[nodiscard]] bool ShouldFreezeEvolution(const FormID loc_formid) const {
+        return !defaultsettings->containers.empty() && !defaultsettings->containers.contains(loc_formid);   
+    }
 
 private:
 
