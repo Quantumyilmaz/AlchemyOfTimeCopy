@@ -15,7 +15,6 @@ class Manager final : public Ticker, public SaveLoadData {
 
     // 0x0003eb42 damage health
 
-    //std::mutex mutex;
     std::shared_mutex sharedMutex_;
 
     std::vector<Source> sources;

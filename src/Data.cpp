@@ -111,6 +111,8 @@ std::map<RefID, std::vector<StageUpdate>> Source::UpdateAllStages(const std::vec
 		logger::warn("No data found for source {}", editorid);
 		return updated_instances;
 	}
+
+
     for (auto& reffid : filter) {
         logger::trace("Refid in filter: {}", reffid);
         if (!data.contains(reffid)) {
@@ -123,6 +125,7 @@ std::map<RefID, std::vector<StageUpdate>> Source::UpdateAllStages(const std::vec
                 Stage* new_stage = nullptr;
                 if (instance.xtra.is_transforming) {
                     instance.xtra.is_decayed = true;
+                    instance.xtra.is_fake = false;
                     const auto temp_formid = instance.GetDelayerFormID();
                     if (!transformed_stages.contains(temp_formid)) {
 						logger::error("Transformed stage not found.");
@@ -156,14 +159,11 @@ bool Source::IsStage(const FormID some_formid) {
 }
 
 inline bool Source::IsStageNo(const StageNo no) const {
-    if (stages.contains(no)) return true;
-    if (fake_stages.contains(no)) return true;
-    return false;
+    return stages.contains(no) || fake_stages.contains(no);
 }
 
 inline bool Source::IsFakeStage(const StageNo no) const {
-    const auto it = fake_stages.find(no);
-    return it != fake_stages.end();
+	return fake_stages.contains(no);
 }
 
 StageNo Source::GetStageNo(const FormID formid_) {
@@ -444,10 +444,11 @@ inline bool Source::IsTimeModulator(const FormID _form_id) const {
 
 bool Source::IsDecayedItem(const FormID _form_id) const {
     // if it is one of the transformations counts as decayed
-    for (const auto& trns_tpl : defaultsettings->transformers | std::views::values) {
-        if (const auto temp_formid = std::get<0>(trns_tpl); temp_formid == _form_id) return true; 
-    }
-    return decayed_stage.formid == _form_id; 
+	if (decayed_stage.formid == _form_id) return true;
+	return std::ranges::any_of(defaultsettings->transformers | std::views::values,
+                               [&](const auto& trns_tpl) {
+                                   return std::get<0>(trns_tpl) == _form_id;
+                               });
 }
 
 inline FormID Source::GetModulatorInInventory(RE::TESObjectREFR* inventory_owner) const {

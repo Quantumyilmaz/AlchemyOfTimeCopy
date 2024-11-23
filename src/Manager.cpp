@@ -186,7 +186,7 @@ void Manager::ApplyStageInWorld(RE::TESObjectREFR* wo_ref, const Stage& stage, R
     if (!source_bound) {
         logger::trace("Setting ObjectReference to custom stage form.");
         WorldObject::SwapObjects(wo_ref, stage.GetBound());
-        //wo_ref->extraList.RemoveByType(RE::ExtraDataType::kTextDisplayData);
+        wo_ref->extraList.RemoveByType(RE::ExtraDataType::kTextDisplayData);
     }
     else {
         WorldObject::SwapObjects(wo_ref, source_bound);
