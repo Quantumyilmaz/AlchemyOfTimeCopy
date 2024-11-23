@@ -184,9 +184,9 @@ inline void Manager::ApplyStageInWorld_Fake(RE::TESObjectREFR* wo_ref, const cha
 void Manager::ApplyStageInWorld(RE::TESObjectREFR* wo_ref, const Stage& stage, RE::TESBoundObject* source_bound)
 {
     if (!source_bound) {
-        wo_ref->extraList.RemoveByType(RE::ExtraDataType::kTextDisplayData);
         logger::trace("Setting ObjectReference to custom stage form.");
         WorldObject::SwapObjects(wo_ref, stage.GetBound());
+        //wo_ref->extraList.RemoveByType(RE::ExtraDataType::kTextDisplayData);
     }
     else {
         WorldObject::SwapObjects(wo_ref, source_bound);
@@ -869,9 +869,7 @@ void Manager::Update(RE::TESObjectREFR* from, RE::TESObjectREFR* to, const RE::T
     const bool to_is_world_object = to && !to->HasContainer();
     if (to_is_world_object) count = to->extraList.GetCount();
 
-    std::unique_lock lock(sharedMutex_);
 	if (from && to && !from->HasContainer()) queue_delete_.insert(from->GetFormID());
-	lock.unlock();
 
     if (RE::UI::GetSingleton()->IsMenuOpen(RE::BarterMenu::MENU_NAME)){
 		if (from && from->IsPlayerRef()) to = nullptr;
@@ -881,6 +879,7 @@ void Manager::Update(RE::TESObjectREFR* from, RE::TESObjectREFR* to, const RE::T
     if (!to && what && what->Is(RE::FormType::AlchemyItem)) count = 0;
 
     if (what && count > 0) {
+        std::unique_lock lock(sharedMutex_);
         if (const auto src = GetSource(what->GetFormID())) {
 			logger::trace("Update: Source found for {}.", what->GetName());
 	        const auto from_refid = from ? from->GetFormID() : 0;
@@ -889,16 +888,12 @@ void Manager::Update(RE::TESObjectREFR* from, RE::TESObjectREFR* to, const RE::T
 
 	        if (src->data.contains(from_refid)) {
 				logger::trace("Update: Moving {} instances from {} to {}.", count, from_refid, to_refid);
-                lock.lock();
 		        count = src->MoveInstances(from_refid, to_refid, what_formid, count, true);
-				lock.unlock();
 			}
 
 
-			lock.lock();
 	        if (count > 0) Register(what_formid, count, to_refid);
 	        CleanUpSourceData(src);
-            lock.unlock();
 
             if (to_is_world_object && src->data.contains(to_refid)) {
 		        // need to break down the count of the item out in the world into the counts of the instances
@@ -912,7 +907,6 @@ void Manager::Update(RE::TESObjectREFR* from, RE::TESObjectREFR* to, const RE::T
 				        handled_first = true;
                     }
                     else if (const auto new_ref = WorldObject::DropObjectIntoTheWorld(st_inst.GetBound(), temp_count, is_player_owned)) {
-						lock.lock();
                         if (!src->MoveInstance(to_refid, new_ref->GetFormID(), &st_inst)){
 							logger::error("Update: MoveInstance failed for form {} and loc {}.", what_formid, to_refid);
 						}
@@ -920,19 +914,21 @@ void Manager::Update(RE::TESObjectREFR* from, RE::TESObjectREFR* to, const RE::T
                             logger::trace("Update: Moved instance to new ref.");
 							UpdateRef(new_ref);
                         }
-						lock.unlock();
                     }
                     else logger::error("Update: New ref is null.");
 		        }
             }
 		}
-		else logger::trace("Update: Source not found for {}.", what->GetName());
 	}
 
-    lock.lock();
-	if (to) UpdateRef(to);
-    if (from && (from->HasContainer() || !to)) UpdateRef(from);
-	lock.unlock();
+    if (to) {
+		std::unique_lock lock(sharedMutex_);
+        UpdateRef(to);
+    }
+    if (from && (from->HasContainer() || !to)) {
+		std::unique_lock lock(sharedMutex_);
+		UpdateRef(from);
+	}
 }
 
 void Manager::SwapWithStage(RE::TESObjectREFR* wo_ref)
@@ -970,7 +966,7 @@ void Manager::Reset()
 
 void Manager::HandleFormDelete(const FormID a_refid)
 {
-    std::shared_lock lock(sharedMutex_);
+    std::unique_lock lock(sharedMutex_);
 
     for (auto& src : sources) {
         if (src.data.contains(a_refid)) {
