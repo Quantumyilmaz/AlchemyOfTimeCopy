@@ -638,7 +638,7 @@ void Manager::UpdateRef(RE::TESObjectREFR* loc)
 	else if (loc->IsDeleted() || loc->IsDisabled() || loc->IsMarkedForDeletion()) HandleDynamicWO(loc);
 	else if (Settings::world_objects_evolve) UpdateWO(loc);
     else return;
-    
+
     for (auto& src : sources) {
 		if (src.data.empty()) continue;
 		CleanUpSourceData(&src);
@@ -865,11 +865,13 @@ void Manager::HandleCraftingExit()
 
 void Manager::Update(RE::TESObjectREFR* from, RE::TESObjectREFR* to, const RE::TESForm* what, Count count)
 {
-    std::unique_lock lock(sharedMutex_);
     
     const bool to_is_world_object = to && !to->HasContainer();
     if (to_is_world_object) count = to->extraList.GetCount();
+
+    std::unique_lock lock(sharedMutex_);
 	if (from && to && !from->HasContainer()) queue_delete_.insert(from->GetFormID());
+	lock.unlock();
 
     if (RE::UI::GetSingleton()->IsMenuOpen(RE::BarterMenu::MENU_NAME)){
 		if (from && from->IsPlayerRef()) to = nullptr;
@@ -887,12 +889,16 @@ void Manager::Update(RE::TESObjectREFR* from, RE::TESObjectREFR* to, const RE::T
 
 	        if (src->data.contains(from_refid)) {
 				logger::trace("Update: Moving {} instances from {} to {}.", count, from_refid, to_refid);
+                lock.lock();
 		        count = src->MoveInstances(from_refid, to_refid, what_formid, count, true);
+				lock.unlock();
 			}
-    
-	        if (count > 0) Register(what_formid, count, to_refid);
 
+
+			lock.lock();
+	        if (count > 0) Register(what_formid, count, to_refid);
 	        CleanUpSourceData(src);
+            lock.unlock();
 
             if (to_is_world_object && src->data.contains(to_refid)) {
 		        // need to break down the count of the item out in the world into the counts of the instances
@@ -906,6 +912,7 @@ void Manager::Update(RE::TESObjectREFR* from, RE::TESObjectREFR* to, const RE::T
 				        handled_first = true;
                     }
                     else if (const auto new_ref = WorldObject::DropObjectIntoTheWorld(st_inst.GetBound(), temp_count, is_player_owned)) {
+						lock.lock();
                         if (!src->MoveInstance(to_refid, new_ref->GetFormID(), &st_inst)){
 							logger::error("Update: MoveInstance failed for form {} and loc {}.", what_formid, to_refid);
 						}
@@ -913,6 +920,7 @@ void Manager::Update(RE::TESObjectREFR* from, RE::TESObjectREFR* to, const RE::T
                             logger::trace("Update: Moved instance to new ref.");
 							UpdateRef(new_ref);
                         }
+						lock.unlock();
                     }
                     else logger::error("Update: New ref is null.");
 		        }
@@ -921,9 +929,10 @@ void Manager::Update(RE::TESObjectREFR* from, RE::TESObjectREFR* to, const RE::T
 		else logger::trace("Update: Source not found for {}.", what->GetName());
 	}
 
+    lock.lock();
 	if (to) UpdateRef(to);
     if (from && (from->HasContainer() || !to)) UpdateRef(from);
-
+	lock.unlock();
 }
 
 void Manager::SwapWithStage(RE::TESObjectREFR* wo_ref)
