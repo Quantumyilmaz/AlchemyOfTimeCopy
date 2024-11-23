@@ -30,9 +30,45 @@ namespace Settings {
     inline int nForgettingTime = 2160;  // in hours
     inline bool disable_warnings = false;
     inline bool world_objects_evolve = false;
-    inline float proximity_radius = 500.f;
-    constexpr float ticker_invterval = 300.f;
+    inline float proximity_radius = 50.f;
 
+    namespace Ticker {
+        enum Intervals {
+            kSlower,
+            kNormal,
+            kFast,
+            kVeryFast,
+            kExtreme
+        };
+
+        inline const char* to_string(const Intervals e) {
+            switch (e) {
+			case kSlower:
+				return "Slower";
+                case kNormal:
+                    return "Normal";
+                case kFast:
+                    return "Fast";
+                case kVeryFast:
+                    return "VeryFast";
+                case kExtreme:
+                    return "Extreme";
+                default:
+                    return "Unknown";
+            }
+        }
+
+        inline std::map<Intervals, int> intervals = {
+		    {kSlower, 3000 },
+			{kNormal, 1000},
+			{kFast, 500},
+			{kVeryFast, 250},
+			{kExtreme, 100}
+		};
+		inline int GetInterval(const Intervals e) {return intervals.at(e);}
+	};
+
+    inline int ticker_speed = Ticker::GetInterval(Ticker::kNormal);
 
 
     const std::vector<std::string> fakes_allowedQFORMS = {"FOOD", "MISC"};
