@@ -50,6 +50,12 @@ void OnMessage(SKSE::MessagingInterface::Message* message) {
     }
     if (message->type == SKSE::MessagingInterface::kPostLoadGame) {
 		logger::info("PostLoadGame.");
+		if (const auto ui = RE::UI::GetSingleton(); 
+            ui->IsMenuOpen(RE::MainMenu::MENU_NAME) ||
+            ui->IsMenuOpen(RE::JournalMenu::MENU_NAME)) {
+			logger::warn("Missing esps?");
+			return;
+		}
         if (!M || M->isUninstalled.load()) return;
 		M->Update(RE::PlayerCharacter::GetSingleton());
         if (!eventSink) return;
