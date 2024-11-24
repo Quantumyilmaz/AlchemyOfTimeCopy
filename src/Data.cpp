@@ -148,7 +148,6 @@ std::map<RefID, std::vector<StageUpdate>> Source::UpdateAllStages(const std::vec
             }
         }
     }
-    //CleanUpData();
     return updated_instances;
 }
 

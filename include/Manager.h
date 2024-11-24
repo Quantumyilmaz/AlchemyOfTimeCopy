@@ -15,7 +15,8 @@ class Manager final : public Ticker, public SaveLoadData {
 
     // 0x0003eb42 damage health
 
-    std::shared_mutex sharedMutex_;
+    std::shared_mutex sourceMutex_;
+    std::shared_mutex queueMutex_;
 
     std::vector<Source> sources;
 
@@ -25,7 +26,8 @@ class Manager final : public Ticker, public SaveLoadData {
 
     std::map<RefID, float> _ref_stops_;
     std::set<RefID> queue_delete_;
-    std::atomic<bool> listen_woupdate = true;
+
+
 
     std::set<FormID> do_not_register;
 
@@ -39,7 +41,7 @@ class Manager final : public Ticker, public SaveLoadData {
 
     [[nodiscard]] Source* MakeSource(FormID source_formid, DefaultSettings* settings);
 
-    void CleanUpSourceData(Source* src);
+    static void CleanUpSourceData(Source* src);
 
     [[nodiscard]] Source* GetSource(FormID some_formid);
 
@@ -78,9 +80,9 @@ public:
     Manager(const std::vector<Source>& data, const std::chrono::milliseconds interval)
         : Ticker([this]() { UpdateLoop(); }, interval), sources(data) {
         Init();
-    };
+    }
 
-    static Manager* GetSingleton(const std::vector<Source>& data, const int u_intervall = Settings::ticker_speed) {
+    static Manager* GetSingleton(const std::vector<Source>& data, const int u_intervall = Settings::Ticker::GetInterval(Settings::ticker_speed)) {
         static Manager singleton(data, std::chrono::milliseconds(u_intervall));
         return &singleton;
     }
@@ -95,7 +97,10 @@ public:
 
     void Uninstall() {isUninstalled.store(true);}
 
-    void ClearWOUpdateQueue() { _ref_stops_.clear(); }
+	void ClearWOUpdateQueue() {
+		std::unique_lock lock(queueMutex_);
+	    _ref_stops_.clear();
+	}
 
     // use it only for world objects! checks if there is a stage instance for the given refid
     [[nodiscard]] bool RefIsRegistered(RefID refid) const;
@@ -135,5 +140,8 @@ public:
 
     void HandleWOBaseChange(RE::TESObjectREFR* ref);
 
+	bool IsTickerActive() const {
+	    return isRunning();
+	}
 
 };

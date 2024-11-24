@@ -211,18 +211,19 @@ RE::BSEventNotifyControl OurEventSink::ProcessEvent(const RE::TESWaitStopEvent*,
 
 RE::BSEventNotifyControl OurEventSink::ProcessEvent(const RE::BGSActorCellEvent* a_event, RE::BSTEventSource<RE::BGSActorCellEvent>*)
 {
+	if (block_eventsinks.load()) return RE::BSEventNotifyControl::kContinue;
     if (!listen_cellchange.load()) return RE::BSEventNotifyControl::kContinue;
     if (!a_event) return RE::BSEventNotifyControl::kContinue;
-    auto eventActorHandle = a_event->actor;
-    auto eventActorPtr = eventActorHandle ? eventActorHandle.get() : nullptr;
-    auto eventActor = eventActorPtr ? eventActorPtr.get() : nullptr;
+    const auto eventActorHandle = a_event->actor;
+    const auto eventActorPtr = eventActorHandle ? eventActorHandle.get() : nullptr;
+    const auto eventActor = eventActorPtr ? eventActorPtr.get() : nullptr;
     if (!eventActor) return RE::BSEventNotifyControl::kContinue;
 
     if (eventActor != RE::PlayerCharacter::GetSingleton()) return RE::BSEventNotifyControl::kContinue;
 
-    auto cellID = a_event->cellID;
+    const auto cellID = a_event->cellID;
     auto* cellForm = cellID ? RE::TESForm::LookupByID(cellID) : nullptr;
-    auto* cell = cellForm ? cellForm->As<RE::TESObjectCELL>() : nullptr;
+    const auto* cell = cellForm ? cellForm->As<RE::TESObjectCELL>() : nullptr;
     if (!cell) return RE::BSEventNotifyControl::kContinue;
 
     if (a_event->flags.any(RE::BGSActorCellEvent::CellFlag::kEnter)) {

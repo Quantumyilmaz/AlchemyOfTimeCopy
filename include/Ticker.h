@@ -14,6 +14,8 @@ public:
 
     void UpdateInterval(std::chrono::milliseconds newInterval);
 
+	bool isRunning() const { return m_Running; }
+
 private:
     void RunLoop();
 

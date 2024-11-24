@@ -24,19 +24,12 @@ void Ticker::RunLoop()
 {
     m_ThreadActive = true;
     while (m_Running) {
-        std::thread runnerThread(m_OnTick);
-        runnerThread.detach();
-
-        m_IntervalMutex.lock();
-  //      std::chrono::milliseconds interval;
-  //      if (m_Interval >= std::chrono::milliseconds(3000)) {
-  //          interval = m_Interval;
-		//} else {
-  //          interval = std::chrono::milliseconds(3000);
-  //      }
-		std::chrono::milliseconds interval = m_Interval;
-        m_IntervalMutex.unlock();
-        std::this_thread::sleep_for(interval);
+        m_OnTick();
+        {
+            std::lock_guard lock(m_IntervalMutex);
+            std::chrono::milliseconds interval = m_Interval;
+            std::this_thread::sleep_for(interval);
+        }
     }
     m_ThreadActive = false;
 }
