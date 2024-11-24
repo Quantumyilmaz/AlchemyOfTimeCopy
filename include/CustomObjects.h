@@ -179,12 +179,16 @@ struct DefaultSettings {
     std::map<StageNo, std::vector<StageEffect>> effects = {};
     std::vector<StageNo> numbers = {};
     FormID decayed_id = 0;
+    std::map<StageNo, uint32_t> colors = {};
 
     std::set<FormID> containers;
     std::map<FormID,float> delayers;
     std::vector<FormID> delayers_order;
     std::map<FormID, std::tuple<FormID, Duration, std::vector<StageNo>>> transformers;
 	std::vector<FormID> transformers_order;
+    std::map<FormID,uint32_t> delayer_colors;
+    std::map<FormID,uint32_t> transformer_colors;
+    
 
     [[nodiscard]] bool IsHealthy() const { return !init_failed; }
 

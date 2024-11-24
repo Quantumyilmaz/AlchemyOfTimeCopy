@@ -35,7 +35,7 @@ class Manager final : public Ticker, public SaveLoadData {
 
     void UpdateLoop();
 
-    void QueueWOUpdate(RefID refid, float stop_t);
+    void QueueWOUpdate(RefID refid, float stop_t, uint32_t color);
 
     [[nodiscard]] unsigned int GetNInstances();
 

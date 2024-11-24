@@ -92,7 +92,7 @@ inline void EquipItem(const FormID formid, const bool unequip = false) {
 
 [[nodiscard]] bool IsEquipped(RE::TESBoundObject* item);
 
-[[nodiscard]] inline const bool IsEquipped(const FormID formid) {
+[[nodiscard]] inline bool IsEquipped(const FormID formid) {
 	return IsEquipped(GetFormByID<RE::TESBoundObject>(formid));
 }
 

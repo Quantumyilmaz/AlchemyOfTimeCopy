@@ -5,7 +5,6 @@ void Manager::WoUpdateLoop(const float curr_time, const std::map<RefID, std::pai
     for (auto& [refid, stop_t_color] : ref_stops_copy) {
         if (stop_t_color.first > curr_time) continue;
 		if (const auto ref = RE::TESForm::LookupByID<RE::TESObjectREFR>(refid)) {
-			logger::trace("WoUpdateLoop: Queued Update for {}.", ref->GetName());
 			{
                 std::unique_lock lock(queueMutex_);
 			    _ref_stops_.erase(refid);
@@ -22,7 +21,7 @@ void Manager::UpdateLoop()
 		logger::info("UpdateLoop: Updating {} world objects.", _ref_stops_.size());
         if (!Settings::world_objects_evolve.load()) {
             for (const auto key : _ref_stops_ | std::views::keys) {
-                if (const auto ref = RE::TESForm::LookupByID<RE::TESObjectREFR>(key); ref && !_ref_stops_[key].second) {
+                if (const auto ref = RE::TESForm::LookupByID<RE::TESObjectREFR>(key); ref) {
                     if (const auto obj3d = ref->Get3D()) {
 						const auto color = RE::NiColorA(0.0f, 0.0f, 0.0f, 0.0f);
                         obj3d->TintScenegraph(color);
@@ -55,16 +54,17 @@ void Manager::UpdateLoop()
 	// Update _ref_stops_ with the new times
     for (const auto key : _ref_stops_ | std::views::keys) {
         if (const auto ref = RE::TESForm::LookupByID<RE::TESObjectREFR>(key); ref) {
-			logger::info("UpdateLoop: Updating {}.", ref->GetName());
             Update(ref);
-            if (_ref_stops_[key].second) {
-                if (const auto obj3d = ref->Get3D()) {
-                    RE::NiColorA color;
-                    hexToRGBA(_ref_stops_[key].second,color);
-				    //logger::info("RGBA: {} {} {} {}", color.red, color.green, color.blue, color.alpha);
+            if (const auto obj3d = ref->Get3D()) {
+                if (!_ref_stops_[key].second) {
+                    const auto color = RE::NiColorA(0.0f, 0.0f, 0.0f, 0.0f);
                     obj3d->TintScenegraph(color);
-				    _ref_stops_[key].second = 0;
-                }
+				}
+				else {
+					RE::NiColorA color;
+					hexToRGBA(_ref_stops_[key].second, color);
+					obj3d->TintScenegraph(color);
+				}
             }
         }
     }
@@ -75,12 +75,11 @@ void Manager::UpdateLoop()
     Start();
 }
 
-void Manager::QueueWOUpdate(const RefID refid, const float stop_t)
+void Manager::QueueWOUpdate(const RefID refid, const float stop_t, const uint32_t color)
 {
     if (!Settings::world_objects_evolve.load()) return;
     std::unique_lock lock(queueMutex_);
-	logger::info("QueueWOUpdate: Queued Update for {:x}.", refid);
-	_ref_stops_[refid] = { stop_t, 0xff1e00db };
+	_ref_stops_[refid] = { stop_t, color };
     Start();
 }
 
@@ -654,7 +653,8 @@ void Manager::UpdateWO(RE::TESObjectREFR* ref)
 		//if (!src.defaultsettings->containers.empty()) wo_inst.SetDelay(curr_time, 0, 0);
         if (wo_inst.xtra.is_fake) ApplyStageInWorld(ref, src.GetStage(wo_inst.no), src.GetBoundObject());
         src.UpdateTimeModulationInWorld(ref,wo_inst,curr_time);
-        if (const auto next_update = src.GetNextUpdateTime(&wo_inst); next_update > curr_time) QueueWOUpdate(refid, next_update);
+		const auto color = wo_inst.xtra.is_transforming ? src.defaultsettings->transformer_colors[wo_inst.GetDelayerFormID()] : wo_inst.GetDelayerFormID() ? src.defaultsettings->delayer_colors[wo_inst.GetDelayerFormID()] : src.defaultsettings->colors[wo_inst.no];
+        if (const auto next_update = src.GetNextUpdateTime(&wo_inst); next_update > curr_time) QueueWOUpdate(refid, next_update, color);
 		break;
     }
 
@@ -771,7 +771,7 @@ void Manager::Register(const FormID some_formid, const Count count, const RefID 
             ApplyStageInWorld(ref, src->GetStage(stage_no), bound);
 		    // add to the queue
 		    const auto hitting_time = src->GetNextUpdateTime(inserted_instance);
-			QueueWOUpdate(location_refid, hitting_time);
+			QueueWOUpdate(location_refid, hitting_time, src->defaultsettings->colors[stage_no]);
         }
     }
 }

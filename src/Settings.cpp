@@ -161,7 +161,8 @@ DefaultSettings parseDefaults_(const YAML::Node& config)
  {
     logger::trace("Parsing settings.");
     DefaultSettings settings;
-        //we have:stages, decayedFormEditorID and delayers
+
+    //we have:stages, decayedFormEditorID and delayers
     if (!config["stages"] || config["stages"].size() == 0) {
         logger::error("Stages are empty.");
         return settings;
@@ -241,6 +242,13 @@ DefaultSettings parseDefaults_(const YAML::Node& config)
             }
         }
         settings.effects[temp_no] = effects;
+
+		// add to colors
+		logger::trace("Color");
+		if (stageNode["color"] && !stageNode["color"].IsNull()) {
+			settings.colors[temp_no] = std::stoul(stageNode["color"].as<std::string>(), nullptr, 16);
+		}
+		else settings.colors[temp_no] = 0;
     }
     // final formid
     logger::trace("terminal item");
@@ -279,6 +287,11 @@ DefaultSettings parseDefaults_(const YAML::Node& config)
 		}
         settings.delayers[temp_formid] = !modulator["magnitude"].IsNull() ? modulator["magnitude"].as<float>() : 1;
 		settings.delayers_order.push_back(temp_formid);
+
+        // colors
+		if (modulator["color"] && !modulator["color"].IsNull()) {
+			settings.delayer_colors[temp_formid] = std::stoul(modulator["color"].as<std::string>(), nullptr, 16);
+        }
     }
 
 	// transformers
@@ -318,6 +331,11 @@ DefaultSettings parseDefaults_(const YAML::Node& config)
         auto temp_tuple = std::make_tuple(temp_formid2, temp_duration, allowed_stages);
         settings.transformers[temp_formid] = temp_tuple;
 		settings.transformers_order.push_back(temp_formid);
+
+		// colors
+		if (transformer["color"] && !transformer["color"].IsNull()) {
+			settings.transformer_colors[temp_formid] = std::stoul(transformer["color"].as<std::string>(), nullptr, 16);
+        }
     }
         
     if (!settings.CheckIntegrity()) logger::critical("Settings integrity check failed.");
