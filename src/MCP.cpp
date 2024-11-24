@@ -25,7 +25,9 @@ void __stdcall UI::RenderSettings()
                         IniSettingToggle(Settings::disable_warnings,setting_name,section_name,"Disables in-game warning pop-ups.");
                     }
                     else if (setting_name == "WorldObjectsEvolve") {
-                        IniSettingToggle(Settings::world_objects_evolve,setting_name,section_name,"Allows items out in the world to transform.");
+						bool temp = Settings::world_objects_evolve.load();
+                        IniSettingToggle(temp,setting_name,section_name,"Allows items out in the world to transform.");
+						Settings::world_objects_evolve.store(temp);
                     }
                     else {
                         // we just want to display the settings in read only mode
@@ -181,8 +183,26 @@ void __stdcall UI::RenderUpdateQ()
 	}
 
 	RefreshButton();
+	ImGui::Text("Update Queue: %s", M->IsTickerActive() ? "Active" : "Paused");
+	// need a combo box to select the ticker speed
+    ImGui::SetNextItemWidth(180.f);
+	const auto ticker_speed_str = Settings::Ticker::to_string(Settings::ticker_speed);
+	if (ImGui::BeginCombo("##combo_ticker_speed", ticker_speed_str.c_str())) {
+		for (int i = 0; i < Settings::Ticker::enum_size; ++i) {
+			const auto speed = static_cast<Settings::Ticker::Intervals>(i);
+			const auto speed_str = Settings::Ticker::to_string(speed);
+			if (ImGui::Selectable(speed_str.c_str(), Settings::ticker_speed == speed)) {
+				Settings::ticker_speed = speed;
+				M->UpdateInterval(std::chrono::milliseconds(Settings::Ticker::GetInterval(Settings::ticker_speed)));
+                SaveSettings();
+            }
+        }
+        ImGui::EndCombo();
+    }
+    ImGui::SameLine();
+    HelpMarker("Choosing faster options reduces the time between updates, making the evolution of items out in the world more responsive. It will take time when switching from slower settings.");
 
-	if (Settings::world_objects_evolve) {
+	if (Settings::world_objects_evolve.load()) {
 		ImGui::TextColored(ImVec4(0, 1, 0, 1), "World Objects Evolve: Enabled");
 	}
 	else {
@@ -193,12 +213,12 @@ void __stdcall UI::RenderUpdateQ()
 		ImGui::TableSetupColumn("Name");
 		ImGui::TableSetupColumn("Update Time");
 		ImGui::TableHeadersRow();
-		for (const auto& name_stop_time : update_q | std::views::values) {
+		for (const auto& [fst, snd] : update_q | std::views::values) {
 			ImGui::TableNextRow();
 			ImGui::TableNextColumn();
-			ImGui::Text(name_stop_time.first.c_str());
+			ImGui::Text(fst.c_str());
 			ImGui::TableNextColumn();
-			ImGui::Text(std::format("{}", name_stop_time.second).c_str());
+			ImGui::Text(std::format("{}", snd).c_str());
 		}
 		ImGui::EndTable();
 	}
@@ -596,10 +616,10 @@ void UI::RefreshButton()
         for (const auto& [refid, stop_time] : M->GetUpdateQueue()) {
 			if (const auto ref = RE::TESForm::LookupByID<RE::TESObjectREFR>(refid)) {
 				std::string temp_name = std::format("{} ({:x})", ref->GetName(), refid);
-				update_q[refid] = std::make_pair(temp_name, stop_time);
+				update_q[refid] = std::make_pair(temp_name, stop_time.first);
 			}
             else {
-				update_q[refid] = std::make_pair(std::format("{:x}", refid), stop_time);
+				update_q[refid] = std::make_pair(std::format("{:x}", refid), stop_time.first);
 		    }
         }
     }

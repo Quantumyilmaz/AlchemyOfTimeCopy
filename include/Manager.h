@@ -24,14 +24,14 @@ class Manager final : public Ticker, public SaveLoadData {
 
     unsigned int _instance_limit = 200000;
 
-    std::map<RefID, float> _ref_stops_;
+    std::map<RefID, std::pair<float,uint32_t>> _ref_stops_;
     std::set<RefID> queue_delete_;
 
 
 
     std::set<FormID> do_not_register;
 
-    void WoUpdateLoop(float curr_time, std::map<RefID, float> ref_stops_copy);
+    void WoUpdateLoop(float curr_time, std::map<RefID, std::pair<float,uint32_t>> ref_stops_copy);
 
     void UpdateLoop();
 
@@ -134,7 +134,7 @@ public:
 
     const std::vector<Source>& GetSources() const { return sources; }
 
-	const std::map<RefID, float>& GetUpdateQueue() const { return _ref_stops_; }
+	const std::map<RefID, std::pair<float,uint32_t>>& GetUpdateQueue() const { return _ref_stops_; }
 
 	void HandleDynamicWO(RE::TESObjectREFR* ref);
 

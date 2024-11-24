@@ -99,6 +99,58 @@ bool FileIsEmpty(const std::string& filename)
     return true;  // Only whitespace characters or file is empty
 }
 
+std::vector<std::pair<int, bool>> encodeString(const std::string& inputString) {
+    std::vector<std::pair<int, bool>> encodedValues;
+    try {
+        for (int i = 0; i < 100 && inputString[i] != '\0'; i++) {
+            char ch = inputString[i];
+            if (std::isprint(ch) && (std::isalnum(ch) || std::isspace(ch) || std::ispunct(ch)) && ch >= 0 &&
+                ch <= 255) {
+                encodedValues.emplace_back(static_cast<int>(ch), std::isupper(ch));
+            }
+        }
+    } catch (const std::exception& e) {
+        logger::error("Error encoding string: {}", e.what());
+        return encodeString("ERROR");
+    }
+    return encodedValues;
+}
+
+std::string decodeString(const std::vector<std::pair<int, bool>>& encodedValues) {
+    std::string decodedString;
+    for (const auto& [fst, snd] : encodedValues) {
+        char ch = static_cast<char>(fst);
+        if (std::isalnum(ch) || std::isspace(ch) || std::ispunct(ch)) {
+            if (snd) {
+                decodedString += ch;
+            } else {
+                decodedString += static_cast<char>(std::tolower(ch));
+            }
+        }
+    }
+    return decodedString;
+}
+
+
+void hexToRGBA(uint32_t color_code, RE::NiColorA& nicolora) {
+    if (color_code > 0xFFFFFF) {
+        // 8-digit hex (RRGGBBAA)
+        nicolora.red   = (color_code >> 24) & 0xFF; // Bits 24-31
+        nicolora.green = (color_code >> 16) & 0xFF; // Bits 16-23
+        nicolora.blue  = (color_code >> 8)  & 0xFF; // Bits 8-15
+        uint8_t alphaInt = color_code & 0xFF;       // Bits 0-7
+        nicolora.alpha = static_cast<float>(alphaInt) / 255.0f;
+    } else {
+        // 6-digit hex (RRGGBB)
+        nicolora.red   = (color_code >> 16) & 0xFF; // Bits 16-23
+        nicolora.green = (color_code >> 8)  & 0xFF; // Bits 8-15
+        nicolora.blue  = color_code & 0xFF;         // Bits 0-7
+        nicolora.alpha = 1.0f;                      // Default to fully opaque
+    }
+	nicolora.red /= 255.0f;
+	nicolora.green /= 255.0f;
+	nicolora.blue /= 255.0f;
+}
 
 bool isValidHexWithLength7or8(const char* input)
 {

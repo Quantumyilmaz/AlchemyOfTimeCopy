@@ -12,8 +12,6 @@ struct DFSaveData {
 using DFSaveDataLHS = std::pair<FormID,std::string>;
 using DFSaveDataRHS = std::vector<DFSaveData>;
 
-std::vector<std::pair<int, bool>> encodeString(const std::string& inputString);
-std::string decodeString(const std::vector<std::pair<int, bool>>& encodedValues);
 bool read_string(SKSE::SerializationInterface* a_intfc, std::string& a_str);
 bool write_string(SKSE::SerializationInterface* a_intfc, const std::string& a_str);
 

@@ -4,8 +4,14 @@
 #include <shared_mutex>
 #include "ClibUtil/editorID.hpp"
 #include <ranges>
+#include "rapidjson/document.h"
+#include <rapidjson/stringbuffer.h>
+#include <rapidjson/istreamwrapper.h>
+#include <rapidjson/error/en.h>
+#include <rapidjson/writer.h>
 
 const auto mod_name = static_cast<std::string>(SKSE::PluginDeclaration::GetSingleton()->GetName());
+const auto plugin_version = SKSE::PluginDeclaration::GetSingleton()->GetVersion();
 constexpr auto po3path = "Data/SKSE/Plugins/po3_Tweaks.dll";
 constexpr auto po3_UoTpath = "Data/SKSE/Plugins/po3_UseOrTake.dll";
 inline bool IsPo3Installed() { return std::filesystem::exists(po3path); };
@@ -27,7 +33,14 @@ std::string DecodeTypeCode(std::uint32_t typeCode);
 
 bool FileIsEmpty(const std::string& filename);
 
+std::vector<std::pair<int, bool>> encodeString(const std::string& inputString);
+std::string decodeString(const std::vector<std::pair<int, bool>>& encodedValues);
+
+void hexToRGBA(uint32_t color_code, RE::NiColorA& nicolora);
+
 inline bool isValidHexWithLength7or8(const char* input);
+
+
 
 template <class T = RE::TESForm>
 static T* GetFormByID(const RE::FormID id, const std::string& editor_id="") {

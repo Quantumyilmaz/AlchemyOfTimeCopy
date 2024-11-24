@@ -98,6 +98,40 @@ bool Settings::IsItem(const RE::TESObjectREFR* ref, std::string type) {
     return IsItem(base->GetFormID(),std::move(type));
 }
 
+void SaveSettings()
+{
+	using namespace rapidjson;
+    Document doc;
+    doc.SetObject();
+
+    Document::AllocatorType& allocator = doc.GetAllocator();
+
+    Value version(rapidjson::kObjectType);
+    version.AddMember("major", plugin_version.major(), allocator);
+    version.AddMember("minor", plugin_version.minor(), allocator);
+    version.AddMember("patch", plugin_version.patch(), allocator);
+    version.AddMember("build", plugin_version.build(), allocator);
+
+    doc.AddMember("plugin_version", version, allocator);
+    doc.AddMember("ticker", Settings::Ticker::to_json(allocator), allocator);
+
+    // Convert JSON document to string
+    StringBuffer buffer;
+    Writer writer(buffer);
+    doc.Accept(writer);
+
+    // Write JSON to file
+    std::string filename = Settings::json_path;
+    create_directories(std::filesystem::path(filename).parent_path());
+    std::ofstream ofs(filename);
+    if (!ofs.is_open()) {
+        logger::error("Failed to open file for writing: {}", filename);
+        return;
+    }
+    ofs << buffer.GetString() << '\n';
+    ofs.close();
+}
+
 std::vector<std::string> LoadExcludeList(const std::string& postfix)
  {
     const auto folder_path = "Data/SKSE/Plugins/AlchemyOfTime/" + postfix + "/exclude";
@@ -408,6 +442,34 @@ void LoadINISettings()
     ini.SaveFile(Settings::INI_path);
 }
 
+void LoadJSONSettings()
+{
+	logger::info("Loading json settings.");
+	std::ifstream ifs(Settings::json_path);
+	if (!ifs.is_open()) {
+		logger::info("Failed to open file for reading: {}", Settings::json_path);
+        SaveSettings();
+		return;
+	}
+	rapidjson::IStreamWrapper isw(ifs);
+	rapidjson::Document doc;
+	doc.ParseStream(isw);
+	if (doc.HasParseError()) {
+		logger::error("Failed to parse json file: {}", Settings::json_path);
+		return;
+	}
+	if (!doc.HasMember("ticker")) {
+		logger::error("Ticker not found in json file: {}", Settings::json_path);
+		return;
+	}
+	const auto& ticker = doc["ticker"];
+	if (!ticker.HasMember("speed")) {
+		logger::error("Speed not found in ticker.");
+		return;
+	}
+	Settings::ticker_speed = Settings::Ticker::from_string(ticker["speed"].GetString());
+}
+
 void LoadSettings()
 {
     logger::info("Loading settings.");
@@ -454,4 +516,18 @@ void LoadSettings()
             return;
         }
 	}
+
+	LoadJSONSettings();
+
+}
+
+
+rapidjson::Value Settings::Ticker::to_json(rapidjson::Document::AllocatorType& a)
+{
+	using namespace rapidjson;
+    Value ticker(kObjectType);
+    const std::string speed_str = Ticker::to_string(ticker_speed);
+    Value speed_value(speed_str.c_str(), a);
+    ticker.AddMember("speed", speed_value, a); 
+    return ticker;
 }

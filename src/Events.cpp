@@ -4,7 +4,7 @@ void OurEventSink::HandleWO(RE::TESObjectREFR* ref) const
 {
     if (!ref) return;
     M->HandleDynamicWO(ref);
-    if (!Settings::world_objects_evolve) return;
+    if (!Settings::world_objects_evolve.load()) return;
     if (ref->IsDisabled() || ref->IsDeleted() || ref->IsMarkedForDeletion()) return;
     if (ref->IsActivationBlocked()) return;
     //if (ref->extraList.GetOwner() && !ref->extraList.GetOwner()->IsPlayer()) return;

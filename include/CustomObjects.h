@@ -29,10 +29,12 @@ struct Stage {
 
     bool crafting_allowed;
 
+    uint32_t color;
+
 
     Stage(){}
-    Stage(const FormID f, const Duration d, const StageNo s, StageName n, const bool ca, const std::vector<StageEffect>& e)
-        : formid(f), duration(d), no(s), name(std::move(n)), mgeffect(e) ,crafting_allowed(ca) {
+    Stage(const FormID f, const Duration d, const StageNo s, StageName n, const bool ca, const std::vector<StageEffect>& e,uint32_t color_ = 0)
+        : formid(f), duration(d), no(s), name(std::move(n)), mgeffect(e) ,crafting_allowed(ca), color(color_) {
         if (!formid) logger::critical("FormID is null");
         else logger::trace("Stage: FormID {}, Duration {}, StageNo {}, Name {}", formid, duration, no, name);
         if (e.empty()) mgeffect.clear();

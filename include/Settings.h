@@ -12,6 +12,7 @@ namespace Settings {
     
     inline bool failed_to_load = false;
     constexpr auto INI_path = L"Data/SKSE/Plugins/AlchemyOfTime.ini";
+    const std::string json_path = std::format("Data/SKSE/Plugins/{}/Settings.json", mod_name);
     const std::map<const char*, bool> moduleskeyvals = {{"FOOD",false},
 														{"INGR",false},
                                                         {"MEDC",false},
@@ -29,46 +30,73 @@ namespace Settings {
     inline int nMaxInstances = 200000;
     inline int nForgettingTime = 2160;  // in hours
     inline bool disable_warnings = false;
-    inline bool world_objects_evolve = false;
+    inline std::atomic world_objects_evolve = false;
     inline float proximity_radius = 50.f;
 
     namespace Ticker {
         enum Intervals {
             kSlower,
+            kSlow,
             kNormal,
             kFast,
+			kFaster,
             kVeryFast,
-            kExtreme
+            kExtreme,
+			kTotal
         };
 
-        inline const char* to_string(const Intervals e) {
+        inline std::string to_string(const Intervals e) {
             switch (e) {
 			case kSlower:
 				return "Slower";
-                case kNormal:
-                    return "Normal";
-                case kFast:
-                    return "Fast";
-                case kVeryFast:
-                    return "VeryFast";
-                case kExtreme:
-                    return "Extreme";
-                default:
-                    return "Unknown";
+			case kSlow:
+				return "Slow";
+            case kNormal:
+                return "Normal";
+            case kFast:
+                return "Fast";
+            case kFaster:
+                return "Faster";
+            case kVeryFast:
+                return "VeryFast";
+            case kExtreme:
+                return "Extreme";
+            default:
+                return "Unknown";
             }
         }
 
+		inline Intervals from_string(const std::string& str) {
+			if (str == "Slower") return kSlower;
+			if (str == "Slow") return kSlow;
+			if (str == "Normal") return kNormal;
+			if (str == "Fast") return kFast;
+			if (str == "Faster") return kFaster;
+			if (str == "VeryFast") return kVeryFast;
+			if (str == "Extreme") return kExtreme;
+			return kNormal;
+		}
+
         inline std::map<Intervals, int> intervals = {
-		    {kSlower, 3000 },
-			{kNormal, 1000},
-			{kFast, 500},
+		    {kSlower, 10000 },
+			{kSlow, 5000},
+			{kNormal, 3000},
+			{kFast, 1000},
+			{kFaster, 500},
 			{kVeryFast, 250},
 			{kExtreme, 100}
 		};
+
 		inline int GetInterval(const Intervals e) {return intervals.at(e);}
+
+        constexpr int enum_size = kTotal;
+
+        rapidjson::Value to_json(rapidjson::Document::AllocatorType& a);
+		void from_json(const rapidjson::Value& j);
+
 	};
 
-    inline int ticker_speed = Ticker::GetInterval(Ticker::kNormal);
+    inline Ticker::Intervals ticker_speed = Ticker::kNormal;
 
 
     const std::vector<std::string> fakes_allowedQFORMS = {"FOOD", "MISC"};
@@ -129,7 +157,9 @@ DefaultSettings parseDefaults_(const YAML::Node& config);
 DefaultSettings parseDefaults(std::string _type);
 CustomSettings parseCustoms(const std::string& _type);
 void LoadINISettings();
+void LoadJSONSettings();
 void LoadSettings();
+void SaveSettings();
 
 
 namespace LogSettings {

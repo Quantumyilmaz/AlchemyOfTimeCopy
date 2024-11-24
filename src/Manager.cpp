@@ -1,9 +1,9 @@
 #include "Manager.h"
 
-void Manager::WoUpdateLoop(const float curr_time, const std::map<RefID, float> ref_stops_copy)
+void Manager::WoUpdateLoop(const float curr_time, const std::map<RefID, std::pair<float,uint32_t>> ref_stops_copy)
 {
-    for (auto& [refid, stop_t] : ref_stops_copy) {
-        if (stop_t > curr_time) continue;
+    for (auto& [refid, stop_t_color] : ref_stops_copy) {
+        if (stop_t_color.first > curr_time) continue;
 		if (const auto ref = RE::TESForm::LookupByID<RE::TESObjectREFR>(refid)) {
 			logger::trace("WoUpdateLoop: Queued Update for {}.", ref->GetName());
 			{
@@ -19,7 +19,16 @@ void Manager::UpdateLoop()
 {
 	{
 	    std::unique_lock lock(queueMutex_);
-        if (!Settings::world_objects_evolve) {
+		logger::info("UpdateLoop: Updating {} world objects.", _ref_stops_.size());
+        if (!Settings::world_objects_evolve.load()) {
+            for (const auto key : _ref_stops_ | std::views::keys) {
+                if (const auto ref = RE::TESForm::LookupByID<RE::TESObjectREFR>(key); ref && !_ref_stops_[key].second) {
+                    if (const auto obj3d = ref->Get3D()) {
+						const auto color = RE::NiColorA(0.0f, 0.0f, 0.0f, 0.0f);
+                        obj3d->TintScenegraph(color);
+                    }
+                }
+            }
             _ref_stops_.clear();
         }
         if (_ref_stops_.empty()) {
@@ -30,6 +39,7 @@ void Manager::UpdateLoop()
 	    if (!queue_delete_.empty()) {
 	        for (auto it = _ref_stops_.begin(); it != _ref_stops_.end();) {
                 if (queue_delete_.contains(it->first)) {
+					logger::info("UpdateLoop: Deleting Update for {:x}.", it->first);
 	                it = _ref_stops_.erase(it);
                 }
                 else ++it;
@@ -45,7 +55,17 @@ void Manager::UpdateLoop()
 	// Update _ref_stops_ with the new times
     for (const auto key : _ref_stops_ | std::views::keys) {
         if (const auto ref = RE::TESForm::LookupByID<RE::TESObjectREFR>(key); ref) {
+			logger::info("UpdateLoop: Updating {}.", ref->GetName());
             Update(ref);
+            if (_ref_stops_[key].second) {
+                if (const auto obj3d = ref->Get3D()) {
+                    RE::NiColorA color;
+                    hexToRGBA(_ref_stops_[key].second,color);
+				    //logger::info("RGBA: {} {} {} {}", color.red, color.green, color.blue, color.alpha);
+                    obj3d->TintScenegraph(color);
+				    _ref_stops_[key].second = 0;
+                }
+            }
         }
     }
 
@@ -57,9 +77,10 @@ void Manager::UpdateLoop()
 
 void Manager::QueueWOUpdate(const RefID refid, const float stop_t)
 {
-    if (!Settings::world_objects_evolve) return;
+    if (!Settings::world_objects_evolve.load()) return;
     std::unique_lock lock(queueMutex_);
-    _ref_stops_[refid] = stop_t;
+	logger::info("QueueWOUpdate: Queued Update for {:x}.", refid);
+	_ref_stops_[refid] = { stop_t, 0xff1e00db };
     Start();
 }
 
@@ -644,7 +665,7 @@ void Manager::UpdateRef(RE::TESObjectREFR* loc)
 {
     if (loc->HasContainer()) UpdateInventory(loc);
 	else if (loc->IsDeleted() || loc->IsDisabled() || loc->IsMarkedForDeletion()) HandleDynamicWO(loc);
-	else if (Settings::world_objects_evolve) UpdateWO(loc);
+	else if (Settings::world_objects_evolve.load()) UpdateWO(loc);
     else return;
 
     for (auto& src : sources) {
@@ -879,7 +900,7 @@ void Manager::Update(RE::TESObjectREFR* from, RE::TESObjectREFR* to, const RE::T
 
     if (from && to && !from->HasContainer()) {
 		std::unique_lock lock(queueMutex_);
-        queue_delete_.insert(from->GetFormID());
+        if (const auto temp_refid = from->GetFormID(); _ref_stops_.contains(temp_refid)) queue_delete_.insert(temp_refid);
     }
 
     if (RE::UI::GetSingleton()->IsMenuOpen(RE::BarterMenu::MENU_NAME)){
