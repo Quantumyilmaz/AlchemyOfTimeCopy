@@ -215,7 +215,7 @@ struct DefaultSettings {
 
     [[nodiscard]] bool IsEmpty();
 
-    void Add(const AddOnSettings& addon);
+    void Add(AddOnSettings& addon);
 
 private:
     bool init_failed = false;

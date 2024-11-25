@@ -233,7 +233,7 @@ bool DefaultSettings::IsEmpty()
 	return false;
 }
 
-void DefaultSettings::Add(const AddOnSettings& addon)
+void DefaultSettings::Add(AddOnSettings& addon)
 {
     if (addon.transformers.empty()) {
 		logger::error("Transformers is empty.");
@@ -255,7 +255,7 @@ void DefaultSettings::Add(const AddOnSettings& addon)
 		}
 		delayers[_formID] = _delay;
     }
-	for (const auto& [_formID, _transformer] : addon.transformers) {
+	for (auto& [_formID, _transformer] : addon.transformers) {
         if (!_formID) {
             logger::critical("AddOn has null formid.");
 	        continue;
@@ -263,6 +263,11 @@ void DefaultSettings::Add(const AddOnSettings& addon)
 		if (!transformers.contains(_formID)) {
 			transformers_order.push_back(_formID);
         }
+        if (auto& allowed_stages = std::get<2>(_transformer); allowed_stages.empty()) {
+			for (const auto& key : numbers) {
+				allowed_stages.push_back(key);
+			}
+		}
 		transformers[_formID] = _transformer;
     }
 	for (const auto& [_formID, _color] : addon.delayer_colors) {
