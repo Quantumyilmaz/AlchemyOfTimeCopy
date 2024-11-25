@@ -243,5 +243,5 @@ private:
 
     static FormID SearchNearbyModulators(const RE::TESObjectREFR* a_obj, const std::vector<FormID>& candidates);
 
-    static void SearchModulatorInCell(FormID& result, const RE::NiPoint3& a_origin, const RE::TESObjectCELL* a_cell, const std::set<FormID>& modulators, float range=0);
+    static void SearchModulatorInCell(FormID& result, const RE::TESObjectREFR* a_origin, const RE::TESObjectCELL* a_cell, const std::set<FormID>& modulators, float range=0);
 };

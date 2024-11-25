@@ -1080,14 +1080,13 @@ FormID Source::SearchNearbyModulators(const RE::TESObjectREFR* a_obj, const std:
 		logger::error("WO and Player cell are null.");
 		return 0;
 	}
-	const auto temp_position = WorldObject::GetPosition(a_obj);
 	FormID result = 0;
 	const auto candidates_set = std::set(candidates.begin(), candidates.end());
     if (cell->IsInteriorCell()) {
-        SearchModulatorInCell(result, temp_position, cell, candidates_set, Settings::proximity_radius);
+        SearchModulatorInCell(result, a_obj, cell, candidates_set, Settings::search_radius);
 		return result;
     }
-    SearchModulatorInCell(result, temp_position, cell, candidates_set, Settings::proximity_radius);
+    SearchModulatorInCell(result, a_obj, cell, candidates_set, Settings::search_radius);
 	if (result) return result;
 
 	// now search in the adjacent cells
@@ -1095,32 +1094,35 @@ FormID Source::SearchNearbyModulators(const RE::TESObjectREFR* a_obj, const std:
 		if (!worldCell.second) continue;
 		if (worldCell.second->IsInteriorCell()) continue;
 		if (!AreAdjacentCells(cell,worldCell.second)) continue;
-		SearchModulatorInCell(result, temp_position, worldCell.second, candidates_set, Settings::proximity_radius);
+		SearchModulatorInCell(result, a_obj, worldCell.second, candidates_set, Settings::search_radius);
 		if (result) return result;
 	}
 
 	return result;
 }
 
-void Source::SearchModulatorInCell(FormID& result, const RE::NiPoint3& a_origin,
+void Source::SearchModulatorInCell(FormID& result, const RE::TESObjectREFR* a_origin,
                                    const RE::TESObjectCELL* a_cell, const std::set<FormID>& modulators, const float range) {
     if (range>0) {
-        a_cell->ForEachReferenceInRange(a_origin, range,
-    [&result, &modulators](RE::TESObjectREFR* ref)-> RE::BSContainer::ForEachResult {
-			    if (!ref || ref->IsDisabled() || ref->IsDeleted() || ref->IsMarkedForDeletion()) return RE::BSContainer::ForEachResult::kContinue;
-                if (const auto form_id = ref->GetObjectReference()->GetFormID(); modulators.contains(form_id)) {
-				    result = form_id;
-				    return RE::BSContainer::ForEachResult::kStop;
-			    }
-			    return RE::BSContainer::ForEachResult::kContinue;
-		    }
-	    );
+        a_cell->ForEachReferenceInRange(WorldObject::GetPosition(a_origin), range,
+                                        [&result, &modulators](RE::TESObjectREFR* ref)-> RE::BSContainer::ForEachResult {
+                                            if (!ref || ref->IsDisabled() || ref->IsDeleted() || ref->IsMarkedForDeletion()) return RE::BSContainer::ForEachResult::kContinue;
+                                            if (const auto form_id = ref->GetObjectReference()->GetFormID(); modulators.contains(form_id)) {
+                                                result = form_id;
+                                                return RE::BSContainer::ForEachResult::kStop;
+                                            }
+                                            return RE::BSContainer::ForEachResult::kContinue;
+                                        }
+            );
     }
     else {
 		a_cell->ForEachReference(
-			[&result, &modulators](RE::TESObjectREFR* ref)-> RE::BSContainer::ForEachResult {
+			[&a_origin,&result, &modulators](RE::TESObjectREFR* ref)-> RE::BSContainer::ForEachResult {
 				if (!ref || ref->IsDisabled() || ref->IsDeleted() || ref->IsMarkedForDeletion()) return RE::BSContainer::ForEachResult::kContinue;
 				if (const auto form_id = ref->GetObjectReference()->GetFormID(); modulators.contains(form_id)) {
+                    if (!WorldObject::IsNextTo(a_origin, ref, Settings::proximity_range)) {
+				        return RE::BSContainer::ForEachResult::kContinue;
+                    }
 					result = form_id;
 					return RE::BSContainer::ForEachResult::kStop;
 				}
@@ -1128,5 +1130,25 @@ void Source::SearchModulatorInCell(FormID& result, const RE::NiPoint3& a_origin,
 			}
 		);
     }
+	if (!result) {
+        // check the worldspace
+		if (const auto worldspace = a_origin->GetWorldspace()) {
+			if (const auto skycell = worldspace->GetSkyCell()) {
+			    skycell->ForEachReference(
+			        [&a_origin,&result, &modulators](RE::TESObjectREFR* ref)-> RE::BSContainer::ForEachResult {
+				        if (!ref || ref->IsDisabled() || ref->IsDeleted() || ref->IsMarkedForDeletion()) return RE::BSContainer::ForEachResult::kContinue;
+				        if (const auto form_id = ref->GetObjectReference()->GetFormID(); modulators.contains(form_id)) {
+                            if (!WorldObject::IsNextTo(a_origin, ref, Settings::proximity_range)) {
+				                return RE::BSContainer::ForEachResult::kContinue;
+                            }
+					        result = form_id;
+					        return RE::BSContainer::ForEachResult::kStop;
+				        }
+				        return RE::BSContainer::ForEachResult::kContinue;
+			        }
+		        );
+		    }
+		}
+	}
 }
 

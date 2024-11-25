@@ -642,8 +642,8 @@ RE::NiPoint3 WorldObject::GetPosition(const RE::TESObjectREFR* obj)
 {
     const auto body = GetRigidBody(obj);
 	if (!body) {
-		logger::error("Body is null.");
-		return {};
+		logger::info("Body is null.");
+		return obj->GetPosition();
     }
     RE::hkVector4 havockPosition;
     body->GetPosition(havockPosition);
@@ -653,6 +653,26 @@ RE::NiPoint3 WorldObject::GetPosition(const RE::TESObjectREFR* obj)
     constexpr float havockToSkyrimConversionRate = 69.9915f;
     newPosition *= havockToSkyrimConversionRate;
     return newPosition;
+}
+
+bool WorldObject::IsNextTo(const RE::TESObjectREFR* a_obj, const RE::TESObjectREFR* a_target, float range)
+{
+	logger::info("a_obj {} bound_max {} bound_min {}", a_obj->GetName(), a_obj->GetBoundMax().Length(), a_obj->GetBoundMin().Length());
+	logger::info("a_target {} bound_max {} bound_min {}", a_target->GetName(), a_target->GetBoundMax().Length(), a_target->GetBoundMin().Length());
+	const auto a_obj_center = GetPosition(a_obj);
+	const auto a_target_center = GetPosition(a_target);
+	const auto a_obj_eff_rad = std::sqrtf(
+        a_obj->GetBoundMax().Length() * a_obj->GetBoundMin().Length() * 
+        std::powf(a_obj->GetReferenceRuntimeData().refScale/100.f,2) / std::numbers::pi);
+	const auto a_target_eff_rad = std::sqrtf(
+        a_target->GetBoundMax().Length() * a_target->GetBoundMin().Length() *
+        std::powf(a_target->GetReferenceRuntimeData().refScale/100.f,2) / std::numbers::pi);
+	const auto distance = a_obj_center.GetDistance(a_target_center);
+	logger::info("Object effecive radius: {} Target effective radius: {} Distance: {}", a_obj_eff_rad, a_target_eff_rad, distance);
+    if (distance < a_obj_eff_rad + a_target_eff_rad + range) {
+        return true;
+    }
+	return false;
 }
 
 std::string String::toLowercase(const std::string& str)

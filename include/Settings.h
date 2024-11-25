@@ -31,8 +31,9 @@ namespace Settings {
     inline int nForgettingTime = 2160;  // in hours
     inline bool disable_warnings = false;
     inline std::atomic world_objects_evolve = false;
-    inline float proximity_radius = 50.f;
+    inline float proximity_range = 10.f;
 
+    inline float search_radius = -1.f;
     namespace Ticker {
         enum Intervals {
             kSlower,
