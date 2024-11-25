@@ -11,16 +11,16 @@ struct Source {
 
     FormID formid = 0;
     std::string editorid;
-    DefaultSettings* defaultsettings = nullptr;  // eigentlich sollte settings heissen
     std::string qFormType;
+    DefaultSettings settings;
 
     
     Source(const FormID id, const std::string& id_str,   // NOLINT(modernize-pass-by-value)
         //RE::EffectSetting* e_m, 
         DefaultSettings* sttngs=nullptr)
-        : formid(id), editorid(id_str),
-          //empty_mgeff(e_m), 
-        defaultsettings(sttngs) { Init(); }
+        : formid(id), editorid(id_str)
+          //empty_mgeff(e_m)
+          { Init(sttngs); }
 
     [[maybe_unused]] [[nodiscard]] std::string_view GetName() const;
 
@@ -89,12 +89,12 @@ struct Source {
 	[[nodiscard]] const Stage& GetDecayedStage() const { return decayed_stage; }
 
 	[[nodiscard]] bool ShouldFreezeEvolution(const FormID loc_formid) const {
-        return !defaultsettings->containers.empty() && !defaultsettings->containers.contains(loc_formid);   
+        return !settings.containers.empty() && !settings.containers.contains(loc_formid);   
     }
 
 private:
 
-    void Init();
+    void Init(const DefaultSettings* defaultsettings);
 
     RE::FormType formtype;
     std::set<StageNo> fake_stages;
@@ -137,8 +137,8 @@ private:
 
     template <typename T>
     void GatherStages()  {
-        for (StageNo stage_no: defaultsettings->numbers) {
-            const auto stage_formid = defaultsettings->items[stage_no];
+        for (StageNo stage_no: settings.numbers) {
+            const auto stage_formid = settings.items[stage_no];
             if (!stage_formid && stage_no != 0) {
                 if (Vector::HasElement(Settings::fakes_allowedQFORMS, qFormType))
                 {
@@ -215,16 +215,16 @@ private:
             }
 
             // Update value of the fake form
-            const auto temp_value = defaultsettings->costoverrides[st_no];
+            const auto temp_value = settings.costoverrides[st_no];
             if (temp_value >= 0) FormTraits<T>::SetValue(stage_form, temp_value);
             // Update weight of the fake form
-            const auto temp_weight = defaultsettings->weightoverrides[st_no];
+            const auto temp_weight = settings.weightoverrides[st_no];
             if (temp_weight >= 0) FormTraits<T>::SetWeight(stage_form, temp_weight);
 
-            if (!defaultsettings->effects[st_no].empty() &&
+            if (!settings.effects[st_no].empty() &&
                 Vector::HasElement<std::string>(Settings::mgeffs_allowedQFORMS, qFormType)) {
                 // change mgeff of fake form
-                ApplyMGEFFSettings(stage_form, defaultsettings->effects[st_no]);
+                ApplyMGEFFSettings(stage_form, settings.effects[st_no]);
             }
 
         } else {
@@ -240,4 +240,8 @@ private:
     FormID FetchFake(StageNo st_no);
 
     StageNo GetLastStageNo();
+
+    static FormID SearchNearbyModulators(const RE::TESObjectREFR* a_obj, const std::vector<FormID>& candidates);
+
+    static void SearchModulatorInCell(FormID& result, const RE::NiPoint3& a_origin, const RE::TESObjectCELL* a_cell, const std::set<FormID>& modulators, float range=0);
 };

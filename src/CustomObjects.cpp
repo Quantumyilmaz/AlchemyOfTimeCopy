@@ -203,6 +203,23 @@ bool DefaultSettings::CheckIntegrity() {
 				return false;
 			}
 		}
+
+	}
+
+	for (const auto& _formID : delayers | std::views::keys) {
+		if (!GetFormByID(_formID)) {
+			logger::error("Delayer formid {} not found.", _formID);
+			init_failed = true;
+			return false;
+		}
+	}
+
+    for (const auto& _formID : containers) {
+		if (!GetFormByID(_formID)) {
+			logger::error("Container formid {} not found.", _formID);
+			init_failed = true;
+			return false;
+		}
 	}
 	return true;
 }
@@ -214,4 +231,88 @@ bool DefaultSettings::IsEmpty()
 	    return true;
 	}
 	return false;
+}
+
+void DefaultSettings::Add(const AddOnSettings& addon)
+{
+    if (addon.transformers.empty()) {
+		logger::error("Transformers is empty.");
+    }
+	for (const auto& _formID : addon.containers) {
+        if (!_formID) {
+            logger::critical("AddOn has null formid.");
+	        continue;
+        }
+		containers.insert(_formID);
+    }
+	for (const auto& [_formID, _delay] : addon.delayers) {
+        if (!_formID) {
+            logger::critical("AddOn has null formid.");
+	        continue;
+        }
+        if (!delayers.contains(_formID)) {
+			delayers_order.push_back(_formID);
+		}
+		delayers[_formID] = _delay;
+    }
+	for (const auto& [_formID, _transformer] : addon.transformers) {
+        if (!_formID) {
+            logger::critical("AddOn has null formid.");
+	        continue;
+        }
+		if (!transformers.contains(_formID)) {
+			transformers_order.push_back(_formID);
+        }
+		transformers[_formID] = _transformer;
+    }
+	for (const auto& [_formID, _color] : addon.delayer_colors) {
+        if (!_formID) {
+            logger::critical("AddOn has null formid.");
+	        continue;
+        }
+		delayer_colors[_formID] = _color;
+    }
+	for (const auto& [_formID, _color] : addon.transformer_colors) {
+        if (!_formID) {
+            logger::critical("AddOn has null formid.");
+	        continue;
+        }
+		transformer_colors[_formID] = _color;
+    }
+}
+
+bool AddOnSettings::CheckIntegrity()
+{
+    for (const auto& [_formID, _transformer] : transformers) {
+        const FormID _finalFormEditorID = std::get<0>(_transformer);
+        const Duration _duration = std::get<1>(_transformer);
+        std::vector<StageNo> _allowedStages = std::get<2>(_transformer);
+        if (!GetFormByID(_formID) || !GetFormByID(_finalFormEditorID)) {
+			logger::error("Form not found.");
+			init_failed = true;
+			return false;
+		}
+        if (_duration <= 0) {
+			logger::error("Duration is less than or equal 0.");
+			init_failed = true;
+			return false;
+		}
+	}
+
+	for (const auto& _formID : delayers | std::views::keys) {
+		if (!GetFormByID(_formID)) {
+			logger::error("Delayer form {} not found.", _formID);
+			init_failed = true;
+			return false;
+		}
+	}
+	for (const auto& _formID : containers) {
+		if (!GetFormByID(_formID)) {
+			logger::error("Container form {} not found.", _formID);
+			init_failed = true;
+			return false;
+		}
+	}
+
+	return true;
 }

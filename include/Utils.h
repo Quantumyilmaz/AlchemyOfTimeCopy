@@ -96,6 +96,20 @@ inline void EquipItem(const FormID formid, const bool unequip = false) {
 	return IsEquipped(GetFormByID<RE::TESBoundObject>(formid));
 }
 
+template <typename T>
+void ForEachForm(std::function<bool(T*)> a_callback) {
+    const auto& [map,lock] = RE::TESForm::GetAllForms();
+	RE::BSReadLockGuard locker{ lock };
+    for (auto& [id, form] : *map) {
+		if (!form) continue;
+		if (!form->Is(T::FORMTYPE)) continue;
+		if (auto* casted_form = skyrim_cast<T*>(form); casted_form && a_callback(casted_form)) return;
+    }
+};
+
+// https://github.com/SteveTownsend/SmartHarvestSE/blob/f709333c4cedba061ad21b4d92c90a720e20d2b1/src/WorldState/LocationTracker.cpp#L756
+bool AreAdjacentCells(RE::TESObjectCELL* cellA, RE::TESObjectCELL* cellB);
+
 namespace Types {
 
     struct FormFormID {
@@ -339,6 +353,12 @@ namespace WorldObject {
 			func(ref.get());
 		}
     }
+
+    RE::bhkRigidBody* GetRigidBody(const RE::TESObjectREFR* refr);
+
+    RE::NiPoint3 GetPosition(const RE::TESObjectREFR* obj);
+
+    bool SearchItemInCell(FormID a_formid, RE::TESObjectCELL* a_cell, float radius);
 
 };
 

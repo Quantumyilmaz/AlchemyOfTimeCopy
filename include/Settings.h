@@ -113,6 +113,7 @@ namespace Settings {
     inline std::map<std::string,DefaultSettings> defaultsettings;
     inline std::map<std::string, CustomSettings> custom_settings;
     inline std::map <std::string,std::vector<std::string>> exclude_list;
+    inline std::map<std::string,std::map<FormID, AddOnSettings>> addon_settings;
 
     [[nodiscard]] bool IsQFormType(FormID formid, const std::string& qformtype);
 
@@ -153,6 +154,8 @@ namespace Settings {
 };
 
 std::vector<std::string> LoadExcludeList(const std::string& postfix);
+AddOnSettings parseAddOns_(const YAML::Node& config);
+std::map<FormID, AddOnSettings> parseAddOns(const std::string& _type);
 DefaultSettings parseDefaults_(const YAML::Node& config);
 DefaultSettings parseDefaults(std::string _type);
 CustomSettings parseCustoms(const std::string& _type);

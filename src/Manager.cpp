@@ -621,7 +621,8 @@ void Manager::UpdateWO(RE::TESObjectREFR* ref)
     const RefID refid = ref->GetFormID();
 	const auto curr_time = RE::Calendar::GetSingleton()->GetHoursPassed();
 	bool not_found = true;
-    
+
+    sources.reserve(sources.size()+1);
     for (size_t i = 0; i < sources.size(); ++i) {  // NOLINT(modernize-loop-convert)
         auto& src = sources[i];
         if (!src.IsHealthy()) continue;
@@ -643,21 +644,23 @@ void Manager::UpdateWO(RE::TESObjectREFR* ref)
             if (src.IsDecayedItem(update.newstage->formid)) {
                 logger::trace("UpdateWO: Decayed item. Source formid {} editorid {}", src.formid, src.editorid);
 		        Register(update.newstage->formid, update.count, refid, update.update_time);
+				//return UpdateWO(ref);
             }
         }
 
-		src = sources[i]; // use list in the future?
+		src = sources[i];
 		if (!src.data.contains(refid)) logger::error("UpdateWO: Refid {} not found in source data.", refid);
         auto& wo_inst = src.data.at(refid).front();
   //      wo_inst.RemoveTimeMod(curr_time); // handledrop. eer daa onceden removedsa bisey yapmiyo zaten
-		//if (!src.defaultsettings->containers.empty()) wo_inst.SetDelay(curr_time, 0, 0);
+		//if (!src.settings.containers.empty()) wo_inst.SetDelay(curr_time, 0, 0);
         if (wo_inst.xtra.is_fake) ApplyStageInWorld(ref, src.GetStage(wo_inst.no), src.GetBoundObject());
         src.UpdateTimeModulationInWorld(ref,wo_inst,curr_time);
-		const auto color = wo_inst.xtra.is_transforming ? src.defaultsettings->transformer_colors[wo_inst.GetDelayerFormID()] : wo_inst.GetDelayerFormID() ? src.defaultsettings->delayer_colors[wo_inst.GetDelayerFormID()] : src.defaultsettings->colors[wo_inst.no];
+		const auto color = wo_inst.xtra.is_transforming ? src.settings.transformer_colors[wo_inst.GetDelayerFormID()] : wo_inst.GetDelayerFormID() ? src.settings.delayer_colors[wo_inst.GetDelayerFormID()] : src.settings.colors[wo_inst.no];
         if (const auto next_update = src.GetNextUpdateTime(&wo_inst); next_update > curr_time) QueueWOUpdate(refid, next_update, color);
 		break;
     }
 
+    sources.shrink_to_fit();
     if (not_found) Register(ref->GetBaseObject()->GetFormID(), ref->extraList.GetCount(), refid);
 }
 
@@ -771,7 +774,7 @@ void Manager::Register(const FormID some_formid, const Count count, const RefID 
             ApplyStageInWorld(ref, src->GetStage(stage_no), bound);
 		    // add to the queue
 		    const auto hitting_time = src->GetNextUpdateTime(inserted_instance);
-			QueueWOUpdate(location_refid, hitting_time, src->defaultsettings->colors[stage_no]);
+			QueueWOUpdate(location_refid, hitting_time, src->settings.colors[stage_no]);
         }
     }
 }
@@ -1024,11 +1027,12 @@ void Manager::SendData()
             const SaveDataLHS lhs{{src.formid, src.editorid}, loc};
             SaveDataRHS rhs;
             for (auto& st_inst : instances) {
-                if (auto plain = st_inst.GetPlain(); plain.is_fake) {
+                auto plain = st_inst.GetPlain();
+                if (plain.is_fake) {
                     plain.is_faved = IsPlayerFavorited(st_inst.GetBound());
                     plain.is_equipped = IsEquipped(st_inst.GetBound());
                 }
-                rhs.push_back(st_inst.GetPlain());
+                rhs.push_back(plain);
                 n_instances++;
             }
             if (!rhs.empty()) SetData(lhs, rhs);
@@ -1215,7 +1219,7 @@ void Manager::ReceiveData()
         }
         for (const auto& st_plain : rhs) {
             if (st_plain.is_fake) locs_to_be_handled[loc].push_back(st_plain.form_id);
-            if (auto* inserted_instance = RegisterAtReceiveData(source_formid, loc, st_plain); !inserted_instance) {
+            if (const auto* inserted_instance = RegisterAtReceiveData(source_formid, loc, st_plain); !inserted_instance) {
                 logger::warn("ReceiveData: could not insert instance: formid: {}, loc: {}", source_formid, loc);
                 continue;
             }

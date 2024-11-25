@@ -380,6 +380,24 @@ bool IsEquipped(RE::TESBoundObject* item) {
     return false;
 }
 
+bool AreAdjacentCells(RE::TESObjectCELL* cellA, RE::TESObjectCELL* cellB)
+{
+	const auto checkCoordinatesA(cellA->GetCoordinates());
+	if (!checkCoordinatesA) {
+		logger::error("Coordinates of cellA is null.");
+		return false;
+	}
+	const auto checkCoordinatesB(cellB->GetCoordinates());
+	if (!checkCoordinatesB) {
+		logger::error("Coordinates of cellB is null.");
+		return false;
+	}
+	const std::int32_t dx(abs(checkCoordinatesA->cellX - checkCoordinatesB->cellX));
+	const std::int32_t dy(abs(checkCoordinatesA->cellY - checkCoordinatesB->cellY));
+	if (dx <= 1 && dy <= 1) return true;
+	return false;
+}
+
 int16_t WorldObject::GetObjectCount(RE::TESObjectREFR* ref) {
     if (!ref) {
         logger::error("Ref is null.");
@@ -606,6 +624,35 @@ RE::TESObjectREFR* WorldObject::TryToGetRefInCell(const FormID baseid, const Cou
         }
     }
     return nullptr;
+}
+
+RE::bhkRigidBody* WorldObject::GetRigidBody(const RE::TESObjectREFR* refr)
+{
+    const auto object3D = refr->Get3D();
+    if (!object3D) {
+        return nullptr;
+    }
+    if (const auto body = object3D->GetCollisionObject()) {
+        return body->GetRigidBody();
+    }
+    return nullptr;
+}
+
+RE::NiPoint3 WorldObject::GetPosition(const RE::TESObjectREFR* obj)
+{
+    const auto body = GetRigidBody(obj);
+	if (!body) {
+		logger::error("Body is null.");
+		return {};
+    }
+    RE::hkVector4 havockPosition;
+    body->GetPosition(havockPosition);
+    float components[4];
+    _mm_store_ps(components, havockPosition.quad);
+    RE::NiPoint3 newPosition = {components[0], components[1], components[2]};
+    constexpr float havockToSkyrimConversionRate = 69.9915f;
+    newPosition *= havockToSkyrimConversionRate;
+    return newPosition;
 }
 
 std::string String::toLowercase(const std::string& str)

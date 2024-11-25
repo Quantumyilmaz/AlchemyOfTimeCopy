@@ -169,6 +169,25 @@ struct StageUpdate {
         new_is_fake(fake) {}
 };
 
+struct AddOnSettings {
+    std::set<FormID> containers;
+    std::map<FormID,float> delayers;
+    std::vector<FormID> delayers_order;
+    std::map<FormID, std::tuple<FormID, Duration, std::vector<StageNo>>> transformers;
+	std::vector<FormID> transformers_order;
+    std::map<FormID,uint32_t> delayer_colors;
+    std::map<FormID,uint32_t> transformer_colors;
+
+    [[nodiscard]] bool IsHealthy() const { return !init_failed; }
+
+    [[nodiscard]] bool CheckIntegrity();
+
+    [[nodiscard]] bool IsEmpty();
+
+private:
+    bool init_failed = false;
+};
+
 struct DefaultSettings {
     std::map<StageNo, FormID> items = {};
     std::map<StageNo, Duration> durations = {};
@@ -195,6 +214,8 @@ struct DefaultSettings {
     [[nodiscard]] bool CheckIntegrity();
 
     [[nodiscard]] bool IsEmpty();
+
+    void Add(const AddOnSettings& addon);
 
 private:
     bool init_failed = false;

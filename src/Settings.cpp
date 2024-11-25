@@ -135,7 +135,7 @@ void SaveSettings()
 std::vector<std::string> LoadExcludeList(const std::string& postfix)
  {
     const auto folder_path = "Data/SKSE/Plugins/AlchemyOfTime/" + postfix + "/exclude";
-    logger::trace("Exclude path: {}", folder_path);
+    //logger::trace("Exclude path: {}", folder_path);
 
     // Create folder if it doesn't exist
     std::filesystem::create_directories(folder_path);
@@ -155,6 +155,162 @@ std::vector<std::string> LoadExcludeList(const std::string& postfix)
 
     auto result = Vector::SetToVector(strings);
     return result;
+}
+
+AddOnSettings parseAddOns_(const YAML::Node& config)
+{
+    logger::trace("Parsing addon settings.");
+    AddOnSettings settings;
+
+    // containers
+    logger::trace("containers");
+    if (config["containers"] && !config["containers"].IsNull()) {
+		const auto temp_containers = config["containers"].IsScalar() ? std::vector{config["containers"].as<std::string>()} : config["containers"].as<std::vector<std::string>>();
+		for (const auto& container : temp_containers) {
+			if (const FormID temp_formid = GetFormEditorIDFromString(container)) {
+				settings.containers.insert(temp_formid);
+			}
+		}
+    } 
+
+    // delayers
+    logger::trace("timeModulators");
+    for (const auto& modulator : config["timeModulators"]) {
+        const auto temp_formeditorid = modulator["FormEditorID"] && !modulator["FormEditorID"].IsNull()
+                                            ? modulator["FormEditorID"].as<std::string>()
+                                            : "";
+        const FormID temp_formid = GetFormEditorIDFromString(temp_formeditorid);
+		if (!temp_formid) {
+			logger::warn("timeModulators: Formid is 0 for {}", temp_formeditorid);
+			continue;
+		}
+        settings.delayers[temp_formid] = !modulator["magnitude"].IsNull() ? modulator["magnitude"].as<float>() : 1;
+		settings.delayers_order.push_back(temp_formid);
+
+        // colors
+		if (modulator["color"] && !modulator["color"].IsNull()) {
+			settings.delayer_colors[temp_formid] = std::stoul(modulator["color"].as<std::string>(), nullptr, 16);
+        }
+    }
+
+	// transformers
+    for (const auto& transformer : config["transformers"]) {
+        const auto temp_formeditorid = transformer["FormEditorID"] &&
+                                        !transformer["FormEditorID"].IsNull() ? transformer["FormEditorID"].as<std::string>() : "";
+        const FormID temp_formid = GetFormEditorIDFromString(temp_formeditorid);
+		if (!temp_formid) {
+			logger::warn("Transformer Formid is 0 for {}", temp_formeditorid);
+			continue;
+		}
+        const auto temp_finalFormEditorID =
+            transformer["finalFormEditorID"] &&
+            !transformer["finalFormEditorID"].IsNull() ? transformer["finalFormEditorID"].as<std::string>() : "";
+        const FormID temp_formid2 = GetFormEditorIDFromString(temp_finalFormEditorID);
+        if (!transformer["duration"] || transformer["duration"].IsNull()) {
+			logger::warn("Duration is missing.");
+			continue;
+		}
+        const auto temp_duration = transformer["duration"].as<float>();
+        std::vector<StageNo> allowed_stages;
+        if (!transformer["allowed_stages"]) {
+            // default is all stages
+            //for (const auto& key : settings.items | std::views::keys) {
+            //    allowed_stages.push_back(key);
+            //}
+        } 
+        else if (transformer["allowed_stages"].IsScalar()) {
+            allowed_stages.push_back(transformer["allowed_stages"].as<StageNo>());
+        } 
+        else allowed_stages = transformer["allowed_stages"].as<std::vector<StageNo>>();
+
+        const auto temp_tuple = std::make_tuple(temp_formid2, temp_duration, allowed_stages);
+        settings.transformers[temp_formid] = temp_tuple;
+		settings.transformers_order.push_back(temp_formid);
+
+		// colors
+		if (transformer["color"] && !transformer["color"].IsNull()) {
+			settings.transformer_colors[temp_formid] = std::stoul(transformer["color"].as<std::string>(), nullptr, 16);
+        }
+    }
+        
+    if (!settings.CheckIntegrity()) logger::critical("Settings integrity check failed.");
+
+    return settings;
+}
+
+std::map<FormID, AddOnSettings> parseAddOns(const std::string& _type)
+{
+    const auto folder_path = "Data/SKSE/Plugins/AlchemyOfTime/" + _type + "/addon";
+    std::filesystem::create_directories(folder_path);
+
+	std::map<FormID, AddOnSettings> _addon_settings;
+
+    for (const auto& entry : std::filesystem::directory_iterator(folder_path)) {
+        if (!entry.is_regular_file() || entry.path().extension() != ".yml") continue;
+
+        const auto filename = entry.path().string();
+
+		logger::info("Parsing file: {}", filename);
+
+        if (FileIsEmpty(filename)) {
+			logger::info("File is empty: {}", filename);
+			continue;
+        }
+
+        YAML::Node config = YAML::LoadFile(filename);
+
+        if (!config["formsLists"] || config["formsLists"].IsNull()) {
+			logger::warn("formsLists not found in {}", filename);
+			continue;
+		}
+		if (config["formsLists"].size() == 0) {
+			logger::warn("formsLists is empty in {}", filename);
+			continue;
+        }
+
+        for (const auto& Node_ : config["formsLists"]){
+			if (!Node_["forms"]) {
+				logger::warn("Forms not found in {}", filename);
+				continue;
+			}
+            // we have list of owners at each node or a scalar owner
+            if (Node_["forms"].IsScalar()) {
+                const auto ownerName = Node_["forms"].as<std::string>();
+                if (auto temp_settings = parseAddOns_(Node_); temp_settings.CheckIntegrity()) {
+					if (const auto formID = GetFormEditorIDFromString(ownerName)) {
+						logger::error("Formid: {}", formID);
+						_addon_settings[formID] = temp_settings;
+					}
+					else {
+                        logger::error("Formid could not be obtained for {}", ownerName);
+                    }
+                }
+                else {
+					logger::error("Settings integrity check failed for {}", ownerName);
+                }
+            } 
+            else {
+				std::set<FormID> owners;
+                for (const auto& owner : Node_["forms"]) {
+                    if (const auto formID = GetFormEditorIDFromString(owner.as<std::string>())) {
+                        logger::error("Formid: {}", formID);
+                        owners.insert(formID);
+                    }
+					else logger::error("Formid could not be obtained for {}", owner.as<std::string>());
+				}
+
+                if (auto temp_settings = parseAddOns_(Node_); temp_settings.CheckIntegrity()) {
+					for (const auto owner : owners) {
+						_addon_settings[owner] = temp_settings;
+					}
+				}
+				else {
+					logger::error("Settings integrity check failed for forms starting with {}", *owners.begin());
+                }
+			}
+        }
+    }
+    return _addon_settings;
 }
 
 DefaultSettings parseDefaults_(const YAML::Node& config)
@@ -355,7 +511,6 @@ DefaultSettings parseDefaults(std::string _type)
 
     logger::info("Filename: {}", filename);
     const YAML::Node config = YAML::LoadFile(filename);
-    logger::info("File loaded.");
     auto temp_settings = parseDefaults_(config);
     if (!temp_settings.CheckIntegrity()) {
         logger::warn("parseDefaults: Settings integrity check failed for {}", _type);
@@ -367,7 +522,7 @@ CustomSettings parseCustoms(const std::string& _type)
     CustomSettings _custom_settings;
     const auto folder_path = "Data/SKSE/Plugins/AlchemyOfTime/" + _type + "/custom";
     std::filesystem::create_directories(folder_path);
-    logger::info("Custom path: {}", folder_path);
+    //logger::info("Custom path: {}", folder_path);
         
     for (const auto& entry : std::filesystem::directory_iterator(folder_path)) {
 
@@ -508,7 +663,7 @@ void LoadSettings()
 	}
     for (const auto& _qftype: Settings::QFORMS) {
         try {
-            logger::info("Loading Settings::defaultsettings for {}", _qftype);
+            logger::info("Loading defaultsettings for {}", _qftype);
 			if (auto temp_default_settings = parseDefaults(_qftype); !temp_default_settings.IsEmpty()) Settings::defaultsettings[_qftype] = temp_default_settings;
         } catch (const std::exception& ex) {
             logger::critical("Failed to load default settings for {}: {}", _qftype, ex.what());
@@ -527,15 +682,31 @@ void LoadSettings()
             logger::trace("Key: {}", key.front());
         }
         try {
+			logger::info("Loading exclude list for {}", _qftype);
             Settings::exclude_list[_qftype] = LoadExcludeList(_qftype);
         } catch (const std::exception& ex) {
 			logger::critical("Failed to load exclude list for {}: {}", _qftype, ex.what());
             Settings::failed_to_load = true;
             return;
         }
+		try {
+			logger::info("Loading addons for {}", _qftype);
+		    Settings::addon_settings[_qftype] = parseAddOns(_qftype);
+		}
+		catch (const std::exception& ex) {
+			logger::critical("Failed to load addons for {}: {}", _qftype, ex.what());
+			Settings::failed_to_load = true;
+			return;
+		}
 	}
-
-	LoadJSONSettings();
+	try {
+		LoadJSONSettings();
+	}
+	catch (const std::exception& ex) {
+		logger::critical("Failed to load json settings: {}", ex.what());
+		Settings::failed_to_load = true;
+		return;
+	}
 
 }
 
