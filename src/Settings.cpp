@@ -278,7 +278,6 @@ std::map<FormID, AddOnSettings> parseAddOns(const std::string& _type)
                 const auto ownerName = Node_["forms"].as<std::string>();
                 if (auto temp_settings = parseAddOns_(Node_); temp_settings.CheckIntegrity()) {
 					if (const auto formID = GetFormEditorIDFromString(ownerName)) {
-						logger::error("Formid: {}", formID);
 						_addon_settings[formID] = temp_settings;
 					}
 					else {
@@ -503,6 +502,12 @@ DefaultSettings parseDefaults_(const YAML::Node& config)
 DefaultSettings parseDefaults(std::string _type)
 { 
     const auto filename = "Data/SKSE/Plugins/AlchemyOfTime/" + _type + "/AoT_default" + _type + ".yml";
+
+	// check if the file exists
+	if (!std::filesystem::exists(filename)) {
+		logger::warn("File does not exist: {}", filename);
+		return {};
+	}
 
 	if (FileIsEmpty(filename)) {
 		logger::info("File is empty: {}", filename);
