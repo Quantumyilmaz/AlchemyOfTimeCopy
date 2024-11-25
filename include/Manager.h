@@ -103,7 +103,7 @@ public:
 	}
 
     // use it only for world objects! checks if there is a stage instance for the given refid
-    [[nodiscard]] bool RefIsRegistered(RefID refid) const;
+    [[nodiscard]] bool RefIsRegistered(RefID refid);
 
     void Register(FormID some_formid, Count count, RefID location_refid,
                                            Duration register_time = 0);

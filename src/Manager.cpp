@@ -18,7 +18,6 @@ void Manager::UpdateLoop()
 {
 	{
 	    std::unique_lock lock(queueMutex_);
-		logger::info("UpdateLoop: Updating {} world objects.", _ref_stops_.size());
         if (!Settings::world_objects_evolve.load()) {
             for (const auto key : _ref_stops_ | std::views::keys) {
                 if (const auto ref = RE::TESForm::LookupByID<RE::TESObjectREFR>(key); ref) {
@@ -38,7 +37,6 @@ void Manager::UpdateLoop()
 	    if (!queue_delete_.empty()) {
 	        for (auto it = _ref_stops_.begin(); it != _ref_stops_.end();) {
                 if (queue_delete_.contains(it->first)) {
-					logger::info("UpdateLoop: Deleting Update for {:x}.", it->first);
 	                it = _ref_stops_.erase(it);
                 }
                 else ++it;
@@ -677,11 +675,12 @@ void Manager::UpdateRef(RE::TESObjectREFR* loc)
 	}
 }
 
-bool Manager::RefIsRegistered(const RefID refid) const {
+bool Manager::RefIsRegistered(const RefID refid) {
     if (!refid) {
         logger::warn("Refid is null.");
         return false;
     }
+    std::shared_lock lock(sourceMutex_);
     if (sources.empty()) {
         logger::warn("Sources is empty.");
         return false;
@@ -805,6 +804,7 @@ void Manager::HandleCraftingEnter(unsigned int bench_type)
     std::map<FormID, int> to_remove;
     const auto player_inventory = player_ref->GetInventory();
 
+	std::shared_lock lock(sourceMutex_);
     for (auto& src : sources) {
 		if (!src.IsHealthy()) continue;
         if (!src.data.contains(player_refid)) continue;
@@ -973,7 +973,9 @@ void Manager::SwapWithStage(RE::TESObjectREFR* wo_ref)
         logger::critical("Ref is null.");
         return;
     }
+	std::shared_lock lock(sourceMutex_);
     const auto* st_inst = GetWOStageInstance(wo_ref);
+	lock.unlock();
     if (!st_inst) {
         logger::warn("SwapWithStage: Source not found.");
         return;
