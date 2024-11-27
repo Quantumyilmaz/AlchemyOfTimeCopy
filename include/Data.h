@@ -192,18 +192,12 @@ private:
 
         if (const auto stage_form = GetFormByID<T>(new_formid)) {
             RegisterStage(new_formid, st_no);
-            if (const auto it = stages.find(st_no); it == stages.end()) {
+            if (!stages.contains(st_no)) {
                 logger::error("Stage {} not found in stages.", st_no);
-                DFT->Delete(new_formid);
                 return 0;
             }
 
             // Update name of the fake form
-            if (!stages.contains(st_no)) {
-			    logger::error("Stage {} does not exist.", st_no);
-			    DFT->Delete(new_formid);
-			    return 0;
-		    }
             const auto& name = stages.at(st_no).name;
             const auto og_name = RE::TESForm::LookupByID(formid)->GetName();
             const auto new_name = std::string(og_name) + " (" + name + ")";
@@ -227,7 +221,6 @@ private:
 
         } else {
 		    logger::error("Could not create copy form for source {}", editorid);
-            DFT->Delete(new_formid);
 		    return 0;
 	    }
      

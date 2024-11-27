@@ -27,11 +27,9 @@ class Manager final : public Ticker, public SaveLoadData {
     std::map<RefID, std::pair<float,uint32_t>> _ref_stops_;
     std::set<RefID> queue_delete_;
 
-
-
     std::set<FormID> do_not_register;
 
-    void WoUpdateLoop(float curr_time, std::map<RefID, std::pair<float,uint32_t>> ref_stops_copy);
+    void WoUpdateLoop(float curr_time, const std::map<RefID, std::pair<float,uint32_t>>& ref_stops_copy);
 
     void UpdateLoop();
 
@@ -47,6 +45,8 @@ class Manager final : public Ticker, public SaveLoadData {
 
     [[nodiscard]] Source* ForceGetSource(FormID some_formid);
 
+    static bool IsSource(FormID some_formid);
+
     [[nodiscard]] StageInstance* GetWOStageInstance(const RE::TESObjectREFR* wo_ref);
 
     static inline void ApplyStageInWorld_Fake(RE::TESObjectREFR* wo_ref, const char* xname);
@@ -60,7 +60,7 @@ class Manager final : public Ticker, public SaveLoadData {
     static inline void ApplyEvolutionInInventory_(RE::TESObjectREFR* inventory_owner, Count update_count, FormID old_item,
                                                   FormID new_item);
 
-    void ApplyEvolutionInInventory(std::string _qformtype_, RE::TESObjectREFR* inventory_owner, Count update_count,
+    void ApplyEvolutionInInventory(const std::string& _qformtype_, RE::TESObjectREFR* inventory_owner, Count update_count,
                                    FormID old_item, FormID new_item);
 
     static inline void RemoveItem(RE::TESObjectREFR* moveFrom, FormID item_id, Count count);

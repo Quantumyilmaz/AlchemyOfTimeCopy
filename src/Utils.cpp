@@ -631,10 +631,7 @@ RE::bhkRigidBody* WorldObject::GetRigidBody(const RE::TESObjectREFR* refr)
 RE::NiPoint3 WorldObject::GetPosition(const RE::TESObjectREFR* obj)
 {
     const auto body = GetRigidBody(obj);
-	if (!body) {
-		logger::info("Body is null.");
-		return obj->GetPosition();
-    }
+	if (!body) return obj->GetPosition();
     RE::hkVector4 havockPosition;
     body->GetPosition(havockPosition);
     float components[4];
@@ -647,8 +644,8 @@ RE::NiPoint3 WorldObject::GetPosition(const RE::TESObjectREFR* obj)
 
 bool WorldObject::IsNextTo(const RE::TESObjectREFR* a_obj, const RE::TESObjectREFR* a_target, float range)
 {
-	logger::info("a_obj {} bound_max {} bound_min {}", a_obj->GetName(), a_obj->GetBoundMax().Length(), a_obj->GetBoundMin().Length());
-	logger::info("a_target {} bound_max {} bound_min {}", a_target->GetName(), a_target->GetBoundMax().Length(), a_target->GetBoundMin().Length());
+	//logger::info("a_obj {} bound_max {} bound_min {}", a_obj->GetName(), a_obj->GetBoundMax().Length(), a_obj->GetBoundMin().Length());
+	//logger::info("a_target {} bound_max {} bound_min {}", a_target->GetName(), a_target->GetBoundMax().Length(), a_target->GetBoundMin().Length());
 	const auto a_obj_center = GetPosition(a_obj);
 	const auto a_target_center = GetPosition(a_target);
 	const auto a_obj_eff_rad = std::sqrtf(
