@@ -132,9 +132,15 @@ public:
 
     void Print();
 
-    const std::vector<Source>& GetSources() const { return sources; }
+    std::vector<Source> GetSources() {
+		std::shared_lock lock(sourceMutex_);
+        return sources;
+    }
 
-	const std::map<RefID, std::pair<float,uint32_t>>& GetUpdateQueue() const { return _ref_stops_; }
+    std::map<RefID, std::pair<float,uint32_t>> GetUpdateQueue() {
+		std::shared_lock lock(queueMutex_);
+        return _ref_stops_;
+    }
 
 	void HandleDynamicWO(RE::TESObjectREFR* ref);
 
