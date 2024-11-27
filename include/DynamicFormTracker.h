@@ -86,7 +86,7 @@ class DynamicFormTracker : public DFSaveLoadData {
 		return nullptr;
 	}
 
-    static void ReviveDynamicForm(RE::TESForm* fake, RE::TESForm* base, const FormID setFormID) {
+    static void ReviveDynamicForm(RE::TESForm* fake, RE::TESForm* base, const FormID setFormID=0) {
         using namespace DynamicForm;
         fake->Copy(base);
         const auto weaponBaseForm = base->As<RE::TESObjectWEAP>();
@@ -222,7 +222,7 @@ class DynamicFormTracker : public DFSaveLoadData {
 
         if (forms[{base_formid, base_editorid}].contains(setFormID)) {
         	logger::warn("Form with ID {:x} already exist for baseid {} and editorid {}.", setFormID, base_formid, base_editorid);
-            ReviveDynamicForm(new_form, baseForm, 0);
+            ReviveDynamicForm(new_form, baseForm);
         } else ReviveDynamicForm(new_form, baseForm, setFormID);
 
         const auto new_formid = new_form->GetFormID();
@@ -256,7 +256,7 @@ class DynamicFormTracker : public DFSaveLoadData {
         if (formset.empty()) return 0;
 		std::shared_lock lock(customIDforms_mutex);
         for (const auto _formid : formset) {
-            if (customIDforms.contains(_formid) && customIDforms.at(_formid)== custom_id) return _formid;
+            if (customIDforms.contains(_formid) && customIDforms.at(_formid) == custom_id) return _formid;
 		}
         return 0;
     }
@@ -264,11 +264,16 @@ class DynamicFormTracker : public DFSaveLoadData {
     // makes it active
     const RE::TESForm* _yield(const FormID dynamic_formid, RE::TESForm* base_form) {
         if (const auto newForm = RE::TESForm::LookupByID(dynamic_formid)) {
+			if (!underlying_check(base_form, newForm)) {
+				logger::error("Underlying check failed for form with ID {:x}.", dynamic_formid);
+				return nullptr;
+			}
             if (std::strlen(newForm->GetName()) == 0) {
-                ReviveDynamicForm(newForm, base_form, 0);
+                ReviveDynamicForm(newForm, base_form);
 			}
             if (auto lock = std::unique_lock(active_forms_mutex); active_forms.insert(dynamic_formid).second) {
                 lock.unlock();
+                Unreserve(dynamic_formid);
                 if (auto lock2 = std::shared_lock(active_forms_mutex); active_forms.size()>form_limit) {
 					logger::warn("Active dynamic forms limit reached!!!");
                     block_create = true;
@@ -395,7 +400,7 @@ class DynamicFormTracker : public DFSaveLoadData {
             }
         }
 
-        // TODO erg�nzen as you enable other modules
+        // POPULATE THIS as you enable other modules
 
         return true;
     }
@@ -428,7 +433,7 @@ public:
             }
         }
         const std::pair key = {base_formid, base_editorid};
-        if (auto lock = std::shared_lock(forms_mutex); forms.contains(key)) return forms[key];
+        if (auto lock = std::shared_lock(forms_mutex); forms.contains(key)) return forms.at(key);
         return {};
     }
 
@@ -496,7 +501,6 @@ public:
     // tries to fetch by custom id. regardless, returns formid if there is in the bank
     FormID Fetch(const FormID baseFormID, const std::string& baseEditorID,
                  const std::optional<uint32_t> customID) {
-        logger::trace("Fetching form for baseid: {:x}, editorid: {}", baseFormID, baseEditorID);
         auto* base_form = GetFormByID(baseFormID, baseEditorID);
 
         if (!base_form) {
@@ -521,7 +525,7 @@ public:
     template <typename T>
     FormID FetchCreate(const FormID baseFormID, const std::string baseEditorID,
                        const std::optional<uint32_t> customID) {
-        logger::trace("Fetching or creating form for baseid: {:x}, editorid: {}", baseFormID, baseEditorID);
+
         // TODO merge with Fetch
         auto* base_form = GetFormByID<T>(baseFormID, baseEditorID);
         
@@ -542,6 +546,10 @@ public:
 		    }
         }
 
+		// before creating new one, try to find one from the bank without custom id
+		if (const auto dyn_form = GetFormByID<T>(Fetch(baseFormID,baseEditorID,{}))) {
+			return dyn_form->GetFormID();
+        }
 
         if (const auto dyn_form = _yield(Create<T>(base_form), base_form)) {
             const auto new_formid = dyn_form->GetFormID();
@@ -584,7 +592,7 @@ public:
             logger::warn("Underlying check failed for form with ID {:x}.", dynamic_formid);
             return;
         }
-        ReviveDynamicForm(form, base_form, 0);
+        ReviveDynamicForm(form, base_form);
 		std::unique_lock lock(protected_forms_mutex);
 		std::unique_lock lock2(forms_mutex);
         forms[{baseID, baseEditorID}].insert(dynamic_formid);
@@ -602,7 +610,6 @@ public:
 	}
 
     void SendData() {
-        // std::lock_guard<std::mutex> lock(mutex);
         logger::info("--------Sending data (DFT) ---------");
         Clear();
 
@@ -623,10 +630,10 @@ public:
 					std::shared_lock lock(customIDforms_mutex);
 					std::unique_lock lock2(act_effs_mutex);
                     const uint32_t customid_temp = customIDforms.contains(act_eff_formid) ? customIDforms.at(act_eff_formid) : 0;
-                    act_effs.push_back({GetOGFormOfDynamic(act_eff_formid)->GetFormID(),
-                                        act_eff_formid,
-                                        act_eff->elapsedSeconds,
-                                        {false, customid_temp}});
+                    act_effs.push_back({.baseFormid= GetOGFormOfDynamic(act_eff_formid)->GetFormID(),
+                                        .dynamicFormid= act_eff_formid,
+                                        .elapsed= act_eff->elapsedSeconds,
+                                        .custom_id= {false, customid_temp}});
                     act_effs_temp.insert(act_eff_formid);
 				}
             }
@@ -642,7 +649,8 @@ public:
 				const auto has_customid = customIDforms.contains(dyn_formid);
                 const uint32_t customid = has_customid ? customIDforms.at(dyn_formid) : 0;
                 const float act_eff_elpsd = GetActiveEffectElapsed(dyn_formid);
-                DFSaveData saveData({dyn_formid, {has_customid, customid}, act_eff_elpsd});
+                DFSaveData saveData({.dyn_formid= dyn_formid, .custom_id= {has_customid, customid}, .acteff_elapsed=
+                                     act_eff_elpsd});
                 rhs.push_back(saveData);
                 n_fakes++;
 			}
@@ -670,7 +678,8 @@ public:
                 const auto [has_customid, customid] = custom_id;
                 if (act_eff_elpsd >= 0.f) {
 					std::unique_lock lock(act_effs_mutex);
-                    act_effs.push_back({base_formid, dyn_formid, act_eff_elpsd, {has_customid, customid}});
+                    act_effs.push_back({.baseFormid= base_formid, .dynamicFormid= dyn_formid, .elapsed= act_eff_elpsd, .custom_id=
+                                        {has_customid, customid}});
                     n_act_effs++;
                 }
                 if (const auto dyn_form = RE::TESForm::LookupByID(dyn_formid); !dyn_form) {
