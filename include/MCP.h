@@ -87,8 +87,12 @@ namespace UI {
     void __stdcall RenderInspect();
     void __stdcall RenderUpdateQ();
     void __stdcall RenderStages();
+    void __stdcall RenderDFT();
     void __stdcall RenderLog();
     void Register(Manager* manager);
+
+    inline std::map<FormID,std::pair<std::string,int>> dynamic_forms;
+    inline int dft_form_limit = DynamicFormTracker::GetSingleton()->form_limit;
 
     void ExcludeList();
 	void IniSettingToggle(bool& setting, const std::string& setting_name, const std::string&section_name, const char* desc);
@@ -99,6 +103,7 @@ namespace UI {
     void UpdateLocationMap(const std::vector<Source>& sources);
 	void UpdateStages(const std::vector<Source>& sources);
     void RefreshButton();
+    void Refresh();
 
     std::string GetName(FormID formid);
 

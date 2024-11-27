@@ -361,6 +361,30 @@ void __stdcall UI::RenderStages()
 		ImGui::EndTable();
 	}
 }
+void __stdcall UI::RenderDFT()
+{
+    RefreshButton();
+
+	ImGui::Text(std::format("Dynamic Forms ({}/{})", dynamic_forms.size(),dft_form_limit).c_str());
+	if (dynamic_forms.empty()) {
+		ImGui::Text("No dynamic forms found.");
+		return;
+	}
+	// dynamic forms table: FormID, Name, Status
+	if (ImGui::BeginTable("table_dynamic_forms", 3, table_flags)) {
+		for (const auto& [formid, form] : dynamic_forms) {
+			ImGui::TableNextRow();
+			ImGui::TableNextColumn();
+			ImGui::Text(std::format("{:08X}", formid).c_str());
+			ImGui::TableNextColumn();
+			ImGui::Text(form.first.c_str());
+			ImGui::TableNextColumn();
+			const auto color = form.second == 2 ? ImVec4(0, 1, 0, 1) : form.second == 1 ? ImVec4(1, 1, 0, 1) : ImVec4(1, 0, 0, 1);
+			ImGui::TextColored(color, form.second == 2 ? "Active" : form.second == 1 ? "Protected" : "Inactive");
+		}
+		ImGui::EndTable();
+	}
+}
 void __stdcall UI::RenderLog()
 {
 #ifndef NDEBUG
@@ -401,6 +425,7 @@ void UI::Register(Manager* manager)
     SKSEMenuFramework::AddSectionItem("Inspect", RenderInspect);
 	SKSEMenuFramework::AddSectionItem("Update Queue", RenderUpdateQ);
 	SKSEMenuFramework::AddSectionItem("Stages", RenderStages);
+	SKSEMenuFramework::AddSectionItem("Dynamic Forms", RenderDFT);
     SKSEMenuFramework::AddSectionItem("Log", RenderLog);
     M = manager;
 }
@@ -601,32 +626,42 @@ void UI::UpdateStages(const std::vector<Source>& sources)
 
 void UI::RefreshButton()
 {
-    const auto& sources = M->GetSources();
-
     FontAwesome::PushSolid();
 
     if (ImGui::Button((FontAwesome::UnicodeToUtf8(0xf021) + " Refresh").c_str()) || last_generated.empty()) {
-
-        last_generated = std::format("{} (in-game hours)", RE::Calendar::GetSingleton()->GetHoursPassed());
-
-        UpdateLocationMap(sources);
-		UpdateStages(sources);
-
-		update_q.clear();
-        for (const auto& [refid, stop_time] : M->GetUpdateQueue()) {
-			if (const auto ref = RE::TESForm::LookupByID<RE::TESObjectREFR>(refid)) {
-				std::string temp_name = std::format("{} ({:x})", ref->GetName(), refid);
-				update_q[refid] = std::make_pair(temp_name, stop_time.first);
-			}
-            else {
-				update_q[refid] = std::make_pair(std::format("{:x}", refid), stop_time.first);
-		    }
-        }
+		Refresh();
     }
     FontAwesome::Pop();
 
     ImGui::SameLine();
     ImGui::Text(("Last Generated: " + last_generated).c_str());
+}
+
+void UI::Refresh()
+{
+    last_generated = std::format("{} (in-game hours)", RE::Calendar::GetSingleton()->GetHoursPassed());
+	dynamic_forms.clear();
+    for (const auto DFT = DynamicFormTracker::GetSingleton(); const auto& df : DFT->GetDynamicForms()) {
+		if (const auto form = RE::TESForm::LookupByID(df); form) {
+			auto status = DFT->IsActive(df) ? 2 : DFT->IsProtected(df) ? 1 : 0;
+			dynamic_forms[df] = { form->GetName(), status };
+		}
+    }
+
+    const auto sources = M->GetSources();
+    UpdateLocationMap(sources);
+	UpdateStages(sources);
+
+	update_q.clear();
+    for (const auto [refid, stop_time] : M->GetUpdateQueue()) {
+		if (const auto ref = RE::TESForm::LookupByID<RE::TESObjectREFR>(refid)) {
+			std::string temp_name = std::format("{} ({:x})", ref->GetName(), refid);
+			update_q[refid] = std::make_pair(temp_name, stop_time.first);
+		}
+        else {
+			update_q[refid] = std::make_pair(std::format("{:x}", refid), stop_time.first);
+		}
+    }
 }
 
 std::string UI::GetName(FormID formid)
