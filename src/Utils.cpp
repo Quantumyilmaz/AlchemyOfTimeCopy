@@ -653,10 +653,10 @@ bool WorldObject::IsNextTo(const RE::TESObjectREFR* a_obj, const RE::TESObjectRE
 	const auto a_target_center = GetPosition(a_target);
 	const auto a_obj_eff_rad = std::sqrtf(
         a_obj->GetBoundMax().Length() * a_obj->GetBoundMin().Length() * 
-        std::powf(a_obj->GetReferenceRuntimeData().refScale/100.f,2) / std::numbers::pi);
+        std::powf(a_obj->GetReferenceRuntimeData().refScale/100.f,2) / std::numbers::pi_v<float>);
 	const auto a_target_eff_rad = std::sqrtf(
         a_target->GetBoundMax().Length() * a_target->GetBoundMin().Length() *
-        std::powf(a_target->GetReferenceRuntimeData().refScale/100.f,2) / std::numbers::pi);
+        std::powf(a_target->GetReferenceRuntimeData().refScale/100.f,2) / std::numbers::pi_v<float>);
 	const auto distance = a_obj_center.GetDistance(a_target_center);
 	//logger::info("Object effecive radius: {} Target effective radius: {} Distance: {}", a_obj_eff_rad, a_target_eff_rad, distance);
     if (distance < (a_obj_eff_rad + a_target_eff_rad)*Settings::search_scaling + range) {
