@@ -56,7 +56,7 @@ class DynamicFormTracker : public DFSaveLoadData {
         }
     }
 
-	[[nodiscard]] float GetActiveEffectElapsed(const FormID dyn_formid) const {
+	[[nodiscard]] float GetActiveEffectElapsed(const FormID dyn_formid) {
 		std::shared_lock lock(act_effs_mutex);
 		for (const auto& act_eff : act_effs) {
 			if (act_eff.dynamicFormid == dyn_formid) {
@@ -410,12 +410,12 @@ public:
 
     const char* GetType() override { return "DynamicFormTracker"; }
 
-    bool IsActive(const FormID a_formid) const {
+    bool IsActive(const FormID a_formid) {
 		std::shared_lock lock(active_forms_mutex);
         return active_forms.contains(a_formid);
 	}
 
-	bool IsProtected(const FormID a_formid) const {
+	bool IsProtected(const FormID a_formid) {
 		std::shared_lock lock(protected_forms_mutex);
 		return protected_forms.contains(a_formid);
     }
@@ -596,7 +596,7 @@ public:
         protected_forms.erase(dynamic_formid);
 	}
 
-    size_t GetNDeleted() const {
+    size_t GetNDeleted() {
 		std::shared_lock lock(deleted_forms_mutex);
 		return deleted_forms.size();
 	}
