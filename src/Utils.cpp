@@ -1,6 +1,7 @@
 #include "Utils.h"
 
 #include <numbers>
+#include "Settings.h"
 
 bool Types::FormEditorID::operator<(const FormEditorID& other) const
 {
@@ -132,13 +133,13 @@ std::string decodeString(const std::vector<std::pair<int, bool>>& encodedValues)
 }
 
 
-void hexToRGBA(uint32_t color_code, RE::NiColorA& nicolora) {
+void hexToRGBA(const uint32_t color_code, RE::NiColorA& nicolora) {
     if (color_code > 0xFFFFFF) {
         // 8-digit hex (RRGGBBAA)
         nicolora.red   = (color_code >> 24) & 0xFF; // Bits 24-31
         nicolora.green = (color_code >> 16) & 0xFF; // Bits 16-23
         nicolora.blue  = (color_code >> 8)  & 0xFF; // Bits 8-15
-        uint8_t alphaInt = color_code & 0xFF;       // Bits 0-7
+        const uint8_t alphaInt = color_code & 0xFF;       // Bits 0-7
         nicolora.alpha = static_cast<float>(alphaInt) / 255.0f;
     } else {
         // 6-digit hex (RRGGBB)
@@ -198,7 +199,8 @@ FormID GetFormEditorIDFromString(const std::string& formEditorId)
 inline bool FormIsOfType(const RE::TESForm* form, RE::FormType type)
 {
     if (!form) return false;
-	return form->GetFormType() == type;
+    return form->Is(type);
+	//return form->GetFormType() == type;
 }
 
 bool IsFoodItem(const RE::TESForm* form)
@@ -568,22 +570,13 @@ RE::TESObjectREFR* WorldObject::TryToGetRefFromHandle(RE::ObjectRefHandle& handl
         logger::trace("Handle ref found");
         ref = handle_ref.get();
         return ref;
-        /*if (!ref->IsDisabled() && !ref->IsMarkedForDeletion() && !ref->IsDeleted()) {
-            return ref;
-        }*/
     }
     if (handle.get()) {
         ref = handle.get().get();
         return ref;
-        /*if (!ref->IsDisabled() && !ref->IsMarkedForDeletion() && !ref->IsDeleted()) {
-            return ref;
-        }*/
     }
     if (const auto ref_ = RE::TESForm::LookupByID<RE::TESObjectREFR>(handle.native_handle())) {
         return ref_;
-        /*if (!ref_->IsDisabled() && !ref_->IsMarkedForDeletion() && !ref_->IsDeleted()) {
-            return ref_;
-        }*/
     }
     if (max_try && handle) return TryToGetRefFromHandle(handle, --max_try);
     return nullptr;
@@ -602,9 +595,6 @@ RE::TESObjectREFR* WorldObject::TryToGetRefInCell(const FormID baseid, const Cou
     RE::BSSpinLockGuard locker(runtimeData.spinLock);
     for (const auto& ref : runtimeData.references) {
         if (!ref) continue;
-        /*if (ref->IsDisabled()) continue;
-        if (ref->IsMarkedForDeletion()) continue;
-        if (ref->IsDeleted()) continue;*/
         const auto ref_base = ref->GetBaseObject();
         if (!ref_base) continue;
         const auto ref_baseid = ref_base->GetFormID();
@@ -668,8 +658,8 @@ bool WorldObject::IsNextTo(const RE::TESObjectREFR* a_obj, const RE::TESObjectRE
         a_target->GetBoundMax().Length() * a_target->GetBoundMin().Length() *
         std::powf(a_target->GetReferenceRuntimeData().refScale/100.f,2) / std::numbers::pi);
 	const auto distance = a_obj_center.GetDistance(a_target_center);
-	logger::info("Object effecive radius: {} Target effective radius: {} Distance: {}", a_obj_eff_rad, a_target_eff_rad, distance);
-    if (distance < a_obj_eff_rad + a_target_eff_rad + range) {
+	//logger::info("Object effecive radius: {} Target effective radius: {} Distance: {}", a_obj_eff_rad, a_target_eff_rad, distance);
+    if (distance < (a_obj_eff_rad + a_target_eff_rad)*Settings::search_scaling + range) {
         return true;
     }
 	return false;
@@ -1369,12 +1359,12 @@ RE::TESObjectREFR* Menu::GetVendorChestFromMenu()
 
 float Math::Round(const float value, const int n)
 {
-    const float factor = std::pow(10.0f, n);
+    const float factor = std::powf(10.0f, n);
     return std::round(value * factor) / factor;
 }
 
 float Math::Ceil(const float value, const int n)
 {
-    const float factor = std::pow(10.0f, n);
+    const float factor = std::powf(10.0f, n);
     return std::ceil(value * factor) / factor;
 }

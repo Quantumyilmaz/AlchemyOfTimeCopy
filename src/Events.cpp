@@ -3,12 +3,7 @@
 void OurEventSink::HandleWO(RE::TESObjectREFR* ref) const
 {
     if (!ref) return;
-    M->HandleDynamicWO(ref);
-    if (!Settings::world_objects_evolve.load()) return;
-    if (ref->IsDisabled() || ref->IsDeleted() || ref->IsMarkedForDeletion()) return;
-    if (ref->IsActivationBlocked()) return;
     //if (ref->extraList.GetOwner() && !ref->extraList.GetOwner()->IsPlayer()) return;
-    if (RE::PlayerCharacter::GetSingleton()->WouldBeStealing(ref)) return;
     if (!Settings::IsItem(ref)) return;
     if (ref->extraList.HasType(RE::ExtraDataType::kStartingPosition)) {
         if (const auto starting_pos = ref->extraList.GetByType<RE::ExtraStartingPosition>(); starting_pos->location) {

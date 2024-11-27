@@ -1,6 +1,13 @@
 #include "Data.h"
 
 void Source::Init(const DefaultSettings* defaultsettings) {
+
+	if (!defaultsettings) {
+		logger::error("Default settings is null.");
+		InitFailed();
+		return;
+	}
+
     const RE::TESForm* form = GetFormByID(formid, editorid);
     if (const auto bound_ = GetBoundObject(); !form || !bound_) {
         logger::error("Form not found.");
@@ -32,18 +39,12 @@ void Source::Init(const DefaultSettings* defaultsettings) {
     logger::trace("Source initializing with QFormType: {}", qFormType);
 
 	// get settings
-	settings = !defaultsettings ? Settings::defaultsettings[qFormType] : *defaultsettings;
+	settings = *defaultsettings;
     // put addons
-    if (const auto temp = Settings::addon_settings[qFormType];temp.contains(formid)) {
-        if (auto addon = temp.at(formid); addon.CheckIntegrity()) {
-	        settings.Add(addon);
-	    }
-	    else {
-		    logger::error("Addon settings integrity check failed.");
-		    InitFailed();
-		    return;
-	    }
-    }
+	if (auto* addon = Settings::GetAddOnSettings(form); addon && addon->IsHealthy()) {
+		settings.Add(*addon);
+	}
+
     if (!settings.CheckIntegrity()) {
         logger::critical("Default settings integrity check failed.");
 		InitFailed();
@@ -72,6 +73,7 @@ void Source::Init(const DefaultSettings* defaultsettings) {
 	else if (qFormType == "BOOK") GatherStages<RE::TESObjectBOOK>();
 	else if (qFormType == "SLGM") GatherStages<RE::TESSoulGem>();
 	else if (qFormType == "MISC") GatherStages<RE::TESObjectMISC>();
+	else if (qFormType == "NPC") GatherStages<RE::TESNPC>();
 	else {
 		logger::error("QFormType is not one of the predefined types.");
 		InitFailed();
@@ -1098,6 +1100,13 @@ FormID Source::SearchNearbyModulators(const RE::TESObjectREFR* a_obj, const std:
 		if (result) return result;
 	}
 
+    // now search in skycell
+	if (const auto worldspace = a_obj->GetWorldspace()) {
+		if (const auto skycell = worldspace->GetSkyCell()) {
+			SearchModulatorInCell(result, a_obj, skycell, candidates_set, Settings::search_radius);
+		}
+	}
+
 	return result;
 }
 
@@ -1130,25 +1139,5 @@ void Source::SearchModulatorInCell(FormID& result, const RE::TESObjectREFR* a_or
 			}
 		);
     }
-	if (!result) {
-        // check the worldspace
-		if (const auto worldspace = a_origin->GetWorldspace()) {
-			if (const auto skycell = worldspace->GetSkyCell()) {
-			    skycell->ForEachReference(
-			        [&a_origin,&result, &modulators](RE::TESObjectREFR* ref)-> RE::BSContainer::ForEachResult {
-				        if (!ref || ref->IsDisabled() || ref->IsDeleted() || ref->IsMarkedForDeletion()) return RE::BSContainer::ForEachResult::kContinue;
-				        if (const auto form_id = ref->GetObjectReference()->GetFormID(); modulators.contains(form_id)) {
-                            if (!WorldObject::IsNextTo(a_origin, ref, Settings::proximity_range)) {
-				                return RE::BSContainer::ForEachResult::kContinue;
-                            }
-					        result = form_id;
-					        return RE::BSContainer::ForEachResult::kStop;
-				        }
-				        return RE::BSContainer::ForEachResult::kContinue;
-			        }
-		        );
-		    }
-		}
-	}
 }
 

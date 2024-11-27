@@ -91,7 +91,7 @@ unsigned int Manager::GetNInstances() {
     return n;
 }
 
-Source* Manager::MakeSource(const FormID source_formid, DefaultSettings* settings)
+Source* Manager::MakeSource(const FormID source_formid, const DefaultSettings* settings)
 {
     if (!source_formid) return nullptr;
     if (IsDynamicFormID(source_formid)) return nullptr;
@@ -131,45 +131,12 @@ Source* Manager::ForceGetSource(const FormID some_formid)
         return nullptr;
     }
     
-    const auto qform_type = Settings::GetQFormType(some_formid);
-    if (!qform_type.empty() && Settings::custom_settings.contains(qform_type)) {
-        for (auto& custom_settings = Settings::custom_settings[qform_type]; auto& [names, sttng] : custom_settings) {
-            if (!sttng.IsHealthy()) continue;
-            //logger::trace("GetSource: custom settings owner names {}", String::join(names, ", "));
-            for (auto& name : names) {
-                if (const FormID temp_cstm_formid = GetFormEditorIDFromString(name); 
-                    temp_cstm_formid > 0) {
-                    if (const auto temp_cstm_form = GetFormByID(temp_cstm_formid, name); 
-                        temp_cstm_form && temp_cstm_form->GetFormID() == some_formid) {
-                        return MakeSource(some_formid, &sttng);
-                    }
-                }
-            }
-            if (String::includesWord(some_form->GetName(), names)) {
-                return MakeSource(some_formid, &sttng);
-            }
-        }
-    }
-
-
+	if (const auto* customSetting = Settings::GetCustomSetting(some_form)) return MakeSource(some_formid, customSetting);
     logger::trace("No existing source and no custom settings found for the formid {}", some_formid);
-    if (!Settings::IsItem(some_formid, qform_type, true)) {
-        logger::trace("Not an item.");
-        return nullptr;
-    }
-    if (!Settings::defaultsettings.contains(qform_type)) {
-        logger::trace("No default settings found for the qform_type {}", qform_type);
-        return nullptr;
-    }
-    if (!Settings::defaultsettings[qform_type].IsHealthy()) {
-        logger::trace("Default settings not loaded for the qform_type {}", qform_type);
-        return nullptr;
-    }
+	if (const auto* defaultSetting = Settings::GetCustomSetting(some_form)) return MakeSource(some_formid, defaultSetting);
 
-    logger::trace("Creating new source for the formid {}", some_formid);
-    
     // stage item olarak dusunulduyse, custom a baslangic itemi olarak koymali
-    return MakeSource(some_formid, nullptr);
+    return nullptr;
 
 }
 
@@ -615,6 +582,11 @@ void Manager::SyncWithInventory(RE::TESObjectREFR* ref)
 
 void Manager::UpdateWO(RE::TESObjectREFR* ref)
 {
+	HandleDynamicWO(ref);
+    if (!Settings::world_objects_evolve.load()) return;
+	if (ref->IsDeleted() || ref->IsDisabled() || ref->IsMarkedForDeletion()) return;
+    if (ref->IsActivationBlocked()) return;
+    if (RE::PlayerCharacter::GetSingleton()->WouldBeStealing(ref)) return;
 
     const RefID refid = ref->GetFormID();
 	const auto curr_time = RE::Calendar::GetSingleton()->GetHoursPassed();
@@ -665,9 +637,7 @@ void Manager::UpdateWO(RE::TESObjectREFR* ref)
 void Manager::UpdateRef(RE::TESObjectREFR* loc)
 {
     if (loc->HasContainer()) UpdateInventory(loc);
-	else if (loc->IsDeleted() || loc->IsDisabled() || loc->IsMarkedForDeletion()) HandleDynamicWO(loc);
-	else if (Settings::world_objects_evolve.load()) UpdateWO(loc);
-    else return;
+	else UpdateWO(loc);
 
     for (auto& src : sources) {
 		if (src.data.empty()) continue;
@@ -711,7 +681,7 @@ void Manager::Register(const FormID some_formid, const Count count, const RefID 
     }
     const auto ref = RE::TESForm::LookupByID<RE::TESObjectREFR>(location_refid);
     if (!ref) {
-        logger::warn("Location ref is null.");
+        logger::warn("Location ref is null. FormID: {:x}",some_formid);
         return;
 	}
 	if (Inventory::IsQuestItem(some_formid, ref)) {

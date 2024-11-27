@@ -16,15 +16,25 @@ bool Settings::IsQFormType(const FormID formid, const std::string& qformtype) {
 	if (qformtype == "BOOK") return FormIsOfType(form,RE::TESObjectBOOK::FORMTYPE);
     if (qformtype == "SLGM") return FormIsOfType(form, RE::TESSoulGem::FORMTYPE);
 	if (qformtype == "MISC") return FormIsOfType(form,RE::TESObjectMISC::FORMTYPE);
+	if (qformtype == "NPC") return FormIsOfType(form,RE::TESNPC::FORMTYPE);
     return false;
 }
 
 std::string Settings::GetQFormType(const FormID formid)
 {
-    for (const auto& q_ftype : Settings::QFORMS) {
-        if (Settings::IsQFormType(formid,q_ftype)) return q_ftype;
+    for (const auto& q_ftype : QFORMS) {
+        if (IsQFormType(formid,q_ftype)) return q_ftype;
 	}
 	return "";
+}
+
+bool Settings::IsSpecialQForm(RE::TESObjectREFR* ref)
+{
+	const auto base = ref->GetBaseObject();
+	if (!base) return false;
+	const auto qform_type = GetQFormType(base->GetFormID());
+	if (qform_type.empty()) return false;
+	return std::ranges::any_of(sQFORMS, [qform_type](const std::string& qformtype) { return qformtype == qform_type; });
 }
 
 bool Settings::IsInExclude(const FormID formid, std::string type) {
@@ -80,22 +90,80 @@ void Settings::AddToExclude(const std::string& entry_name, const std::string& ty
 		return;
 	}
 	std::ofstream file(file_path, std::ios::app);
-	file << entry_name << std::endl;
+	file << entry_name << '\n';
 	file.close();
 	Settings::exclude_list[type].push_back(entry_name);
 }
 
-bool Settings::IsItem(const FormID formid, std::string type, const bool check_exclude) {
+bool Settings::IsItem(const FormID formid, const std::string& type, const bool check_exclude) {
     if (!formid) return false;
     if (check_exclude && Settings::IsInExclude(formid, type)) return false;
     if (type.empty()) return !GetQFormType(formid).empty();
 	return IsQFormType(formid, type);
 }
 
-bool Settings::IsItem(const RE::TESObjectREFR* ref, std::string type) {
+bool Settings::IsItem(const RE::TESObjectREFR* ref, const std::string& type) {
     const auto base = ref->GetBaseObject();
     if (!base) return false;
-    return IsItem(base->GetFormID(),std::move(type));
+    return IsItem(base->GetFormID(), type);
+}
+
+DefaultSettings* Settings::GetDefaultSetting(const FormID form_id)
+{
+    const auto qform_type = Settings::GetQFormType(form_id);
+
+    if (!IsItem(form_id, qform_type, true)) {
+        logger::trace("Not an item.");
+        return nullptr;
+    }
+    if (!defaultsettings.contains(qform_type)) {
+        logger::trace("No default settings found for the qform_type {}", qform_type);
+        return nullptr;
+    }
+    if (!defaultsettings[qform_type].IsHealthy()) {
+        logger::trace("Default settings not loaded for the qform_type {}", qform_type);
+        return nullptr;
+    }
+
+	return &defaultsettings[qform_type];
+}
+
+DefaultSettings* Settings::GetCustomSetting(const RE::TESForm* form)
+{
+	const auto form_id = form->GetFormID();
+    const auto qform_type = GetQFormType(form_id);
+    if (!qform_type.empty() && custom_settings.contains(qform_type)) {
+        for (auto& customSetting = custom_settings[qform_type]; auto& [names, sttng] : customSetting) {
+            if (!sttng.IsHealthy()) continue;
+            for (auto& name : names) {
+                if (const FormID temp_cstm_formid = GetFormEditorIDFromString(name); 
+                    temp_cstm_formid > 0) {
+                    if (const auto temp_cstm_form = GetFormByID(temp_cstm_formid, name); 
+                        temp_cstm_form && temp_cstm_form->GetFormID() == form_id) {
+                        return &sttng;
+                    }
+                }
+            }
+            if (String::includesWord(form->GetName(), names)) {
+                return &sttng;
+            }
+        }
+    }
+	return nullptr;
+}
+
+AddOnSettings* Settings::GetAddOnSettings(const RE::TESForm* form)
+{
+
+    const auto form_id = form->GetFormID();
+    const auto qform_type = GetQFormType(form_id);
+	if (qform_type.empty()) return nullptr;
+	auto& temp = addon_settings[qform_type];
+	if (!temp.contains(form_id)) return nullptr;
+	if (auto& addon = temp.at(form_id); addon.CheckIntegrity()) {
+		return &addon;
+	}
+	return nullptr;
 }
 
 void SaveSettings()
@@ -537,7 +605,7 @@ CustomSettings parseCustoms(const std::string& _type)
             if (FileIsEmpty(filename)) {
 				logger::info("File is empty: {}", filename);
 				continue;
-            };
+            }
 
             YAML::Node config = YAML::LoadFile(filename);
 

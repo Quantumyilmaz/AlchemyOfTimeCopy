@@ -17,7 +17,7 @@ struct Source {
     
     Source(const FormID id, const std::string& id_str,   // NOLINT(modernize-pass-by-value)
         //RE::EffectSetting* e_m, 
-        DefaultSettings* sttngs=nullptr)
+        const DefaultSettings* sttngs=nullptr)
         : formid(id), editorid(id_str)
           //empty_mgeff(e_m)
           { Init(sttngs); }
@@ -145,10 +145,8 @@ private:
                     fake_stages.insert(stage_no);
                     continue;
                 }
-                else {
-                    logger::critical("No ID given and copy items not allowed for this type {}", qFormType);
-					return;
-                }
+                logger::critical("No ID given and copy items not allowed for this type {}", qFormType);
+				return;
             }
 
             if (stage_no == 0) RegisterStage(formid, stage_no);

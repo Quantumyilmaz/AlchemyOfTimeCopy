@@ -39,7 +39,7 @@ class Manager final : public Ticker, public SaveLoadData {
 
     [[nodiscard]] unsigned int GetNInstances();
 
-    [[nodiscard]] Source* MakeSource(FormID source_formid, DefaultSettings* settings);
+    [[nodiscard]] Source* MakeSource(FormID source_formid, const DefaultSettings* settings);
 
     static void CleanUpSourceData(Source* src);
 
