@@ -24,7 +24,7 @@ class Manager final : public Ticker, public SaveLoadData {
 
     unsigned int _instance_limit = 200000;
 
-    std::map<RefID, std::pair<float,uint32_t>> _ref_stops_;
+    std::map<RefID, std::pair<float,std::pair<uint32_t,bool>>> _ref_stops_;
     std::set<RefID> queue_delete_;
 
     std::set<FormID> do_not_register;
@@ -139,7 +139,11 @@ public:
 
     std::map<RefID, std::pair<float,uint32_t>> GetUpdateQueue() {
 		std::shared_lock lock(queueMutex_);
-        return _ref_stops_;
+		std::map<RefID, std::pair<float, uint32_t>> _ref_stops_copy;
+		for (const auto& [key, value] : _ref_stops_) {
+			_ref_stops_copy[key] = {value.first,value.second.first};
+		}
+        return _ref_stops_copy;
     }
 
 	void HandleDynamicWO(RE::TESObjectREFR* ref);

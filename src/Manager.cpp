@@ -1,6 +1,6 @@
 #include "Manager.h"
 
-void Manager::WoUpdateLoop(const float curr_time, const std::map<RefID, std::pair<float,uint32_t>> ref_stops_copy)
+void Manager::WoUpdateLoop(const float curr_time, const std::map<RefID, std::pair<float, uint32_t>>& ref_stops_copy)
 {
     for (auto& [refid, stop_t_color] : ref_stops_copy) {
         if (stop_t_color.first > curr_time) continue;
@@ -17,9 +17,9 @@ void Manager::WoUpdateLoop(const float curr_time, const std::map<RefID, std::pai
 void Manager::UpdateLoop()
 {
 	{
-	    std::unique_lock lock(queueMutex_);
         if (!Settings::world_objects_evolve.load()) {
-            for (const auto key : _ref_stops_ | std::views::keys) {
+            const auto ref_stops_copy = _ref_stops_;
+            for (const auto key : ref_stops_copy | std::views::keys) {
                 if (const auto ref = RE::TESForm::LookupByID<RE::TESObjectREFR>(key); ref) {
                     if (const auto obj3d = ref->Get3D()) {
 						const auto color = RE::NiColorA(0.0f, 0.0f, 0.0f, 0.0f);
@@ -27,16 +27,19 @@ void Manager::UpdateLoop()
                     }
                 }
             }
+	        std::unique_lock lock(queueMutex_);
             _ref_stops_.clear();
         }
         if (_ref_stops_.empty()) {
             Stop();
+	        std::unique_lock lock(queueMutex_);
             queue_delete_.clear();
             return;
         }
 	    if (!queue_delete_.empty()) {
 	        for (auto it = _ref_stops_.begin(); it != _ref_stops_.end();) {
                 if (queue_delete_.contains(it->first)) {
+	                std::unique_lock lock(queueMutex_);
 	                it = _ref_stops_.erase(it);
                 }
                 else ++it;
@@ -45,30 +48,36 @@ void Manager::UpdateLoop()
         }
 	}
 
-
     if (const auto ui = RE::UI::GetSingleton(); ui && ui->GameIsPaused()) return;
 
 	// new mechanic: WO can also be affected by time modulators
 	// Update _ref_stops_ with the new times
-    for (const auto key : _ref_stops_ | std::views::keys) {
+    std::map<RefID, std::pair<float, uint32_t>> _ref_stops_copy;
+    for (const auto& [key, value] : _ref_stops_) {
+		_ref_stops_copy[key] = {value.first,value.second.first};
+    }
+    for (const auto key : _ref_stops_copy | std::views::keys) {
         if (const auto ref = RE::TESForm::LookupByID<RE::TESObjectREFR>(key); ref) {
             Update(ref);
             if (const auto obj3d = ref->Get3D()) {
-                if (!_ref_stops_[key].second) {
-                    const auto color = RE::NiColorA(0.0f, 0.0f, 0.0f, 0.0f);
-                    obj3d->TintScenegraph(color);
-				}
-				else {
-					RE::NiColorA color;
-					hexToRGBA(_ref_stops_[key].second, color);
-					obj3d->TintScenegraph(color);
-				}
+                if (_ref_stops_.contains(key) && _ref_stops_.at(key).second.second) {
+                    if (!_ref_stops_[key].second.first) {
+                        const auto color = RE::NiColorA(0.0f, 0.0f, 0.0f, 0.0f);
+                        obj3d->TintScenegraph(color);
+				    }
+				    else {
+					    RE::NiColorA color;
+					    hexToRGBA(_ref_stops_[key].second.first, color);
+					    obj3d->TintScenegraph(color);
+				    }
+                    _ref_stops_.at(key).second.second = false;
+                }
             }
         }
     }
 
     if (const auto cal = RE::Calendar::GetSingleton()) {
-        WoUpdateLoop(cal->GetHoursPassed(), _ref_stops_);
+        WoUpdateLoop(cal->GetHoursPassed(), _ref_stops_copy);
     }
     Start();
 }
@@ -77,7 +86,7 @@ void Manager::QueueWOUpdate(const RefID refid, const float stop_t, const uint32_
 {
     if (!Settings::world_objects_evolve.load()) return;
     std::unique_lock lock(queueMutex_);
-	_ref_stops_[refid] = { stop_t, color };
+	_ref_stops_[refid] = { stop_t, {color,true} };
     Start();
 }
 
@@ -133,11 +142,24 @@ Source* Manager::ForceGetSource(const FormID some_formid)
     
 	if (const auto* customSetting = Settings::GetCustomSetting(some_form)) return MakeSource(some_formid, customSetting);
     logger::trace("No existing source and no custom settings found for the formid {}", some_formid);
-	if (const auto* defaultSetting = Settings::GetCustomSetting(some_form)) return MakeSource(some_formid, defaultSetting);
+	if (const auto* defaultSetting = Settings::GetDefaultSetting(some_formid)) return MakeSource(some_formid, defaultSetting);
 
     // stage item olarak dusunulduyse, custom a baslangic itemi olarak koymali
     return nullptr;
 
+}
+
+bool Manager::IsSource(const FormID some_formid)
+{
+    if (!some_formid) return false;
+    const auto some_form = GetFormByID(some_formid);
+    if (!some_form) {
+        logger::warn("Form not found.");
+        return false;
+    }
+	if (Settings::GetCustomSetting(some_form)) return true;
+	if (Settings::GetDefaultSetting(some_formid)) return true;
+    return false;
 }
 
 StageInstance* Manager::GetWOStageInstance(const RE::TESObjectREFR* wo_ref)
@@ -272,7 +294,7 @@ inline void Manager::ApplyEvolutionInInventory_(RE::TESObjectREFR* inventory_own
 }
 
 
-void Manager::ApplyEvolutionInInventory(std::string _qformtype_, RE::TESObjectREFR* inventory_owner, Count update_count, FormID old_item, FormID new_item)
+void Manager::ApplyEvolutionInInventory(const std::string& _qformtype_, RE::TESObjectREFR* inventory_owner, const Count update_count, const FormID old_item, const FormID new_item)
 {
     if (!inventory_owner){
 		logger::error("Inventory owner is null.");
@@ -336,17 +358,12 @@ inline void Manager::RemoveItem(RE::TESObjectREFR* moveFrom, const FormID item_i
 
 		auto* bound = item->first;
 		moveFrom->RemoveItem(bound, count, RE::ITEM_REMOVE_REASON::kRemove, nullptr, nullptr);
-
-		/*SKSE::GetTaskInterface()->AddTask([moveFrom, bound, count]() {
-		    moveFrom->RemoveItem(bound, count, RE::ITEM_REMOVE_REASON::kRemove, nullptr, nullptr);
-		});*/
 	}
 }
 
 void Manager::AddItem(RE::TESObjectREFR* addTo, RE::TESObjectREFR* addFrom, const FormID item_id, const Count count)
 {
     logger::trace("AddItem");
-    // xList = nullptr;
     if (!addTo) {
         logger::critical("add to is null!");
         return;
@@ -374,35 +391,6 @@ void Manager::AddItem(RE::TESObjectREFR* addTo, RE::TESObjectREFR* addFrom, cons
         logger::trace("Item added to container.");
 	}
 	else logger::critical("Bound is null.");
-
-	/*SKSE::GetTaskInterface()->AddTask([item_id, count, addTo, addFrom]() {
-        if (auto* bound = RE::TESForm::LookupByID<RE::TESBoundObject>(item_id)) {
-            logger::trace("Adding item to container.");
-            addTo->AddObjectToContainer(bound, nullptr, count, addFrom);
-			if (auto* ui = RE::UI::GetSingleton(); ui->IsItemMenuOpen()) {
-				logger::trace("Item menu is open.");
-                if (REL::Module::IsSE()) {
-			        RE::SendUIMessage::SendInventoryUpdateMessage(addTo, bound);
-				    if (addFrom) RE::SendUIMessage::SendInventoryUpdateMessage(addFrom, bound);
-                }
-                if (ui->IsMenuOpen(RE::ContainerMenu::MENU_NAME)) {
-                    auto menu = ui->GetMenu(RE::ContainerMenu::MENU_NAME);
-                    Inventory::UpdateItemList<RE::ContainerMenu>();
-                }
-				else if (ui->IsMenuOpen(RE::BarterMenu::MENU_NAME)) {
-					auto menu = ui->GetMenu(RE::BarterMenu::MENU_NAME);
-					Inventory::UpdateItemList<RE::BarterMenu>();
-				}
-				else if (ui->IsMenuOpen(RE::InventoryMenu::MENU_NAME)) {
-					auto menu = ui->GetMenu(RE::InventoryMenu::MENU_NAME);
-					Inventory::UpdateItemList<RE::InventoryMenu>();
-				}
-				
-			}
-            logger::trace("Item added to container.");
-        }
-        else logger::critical("Bound is null.");
-	});*/
 }
 
 
@@ -435,7 +423,6 @@ std::set<float> Manager::GetUpdateTimes(const RE::TESObjectREFR* inventory_owner
         for (auto& st_inst : src.data.at(inventory_owner_refid)) {
             if (st_inst.xtra.is_decayed || !src.IsStageNo(st_inst.no)) continue;
             if (const auto hitting_time = src.GetNextUpdateTime(&st_inst); hitting_time > 0) queued_updates.insert(hitting_time);
-            //else logger::warn("Hitting time is 0 or less!");
         }
     }
 
@@ -1115,12 +1102,7 @@ void Manager::ReceiveData()
 {
     logger::info("-------- Receiving data (Manager) ---------");
 
-    // std::lock_guard<std::mutex> lock(mutex);
 
-    //      if (DFT->GetNDeleted() > 0) {
-    //          logger::critical("ReceiveData: Deleted forms exist.");
-    //          return RaiseMngrErr("ReceiveData: Deleted forms exist.");
-    //}
     if (m_Data.empty()) {
         logger::warn("ReceiveData: No data to receive.");
         return;
@@ -1138,27 +1120,12 @@ void Manager::ReceiveData()
     // trying to make sure that the fake forms in bank will be used when needed
 	auto* DFT = DynamicFormTracker::GetSingleton();
     for (const auto source_forms = DFT->GetSourceForms(); const auto& [source_formid, source_editorid] : source_forms) {
-        if (auto* source_temp = ForceGetSource(
-                source_formid);  // DFT nin receive datasinda editorid ile formid nin uyusmasini garantiledim
-            source_temp && source_temp->IsHealthy() && source_temp->formid == source_formid) {
-            StageNo stage_no_temp = 0;
-            while (source_temp->IsStageNo(stage_no_temp)) {
-                // making sure that there will be a matching fake in the bank when requested later
-                // if there are more fake stages than in the bank, np
-                // if other way around, the unused fakes in the bank will be deleted
-                if (source_temp->IsFakeStage(stage_no_temp)) {
-                    const auto fk_formid =
-                        DFT->Fetch(source_formid, source_editorid, static_cast<uint32_t>(stage_no_temp));
-                    if (fk_formid != 0)
-                        DFT->EditCustomID(fk_formid, static_cast<uint32_t>(stage_no_temp));
-                    else
-                        source_temp->GetStage(
-                            stage_no_temp);  // creates the dynamic form with stage no as custom id
-                }
-                stage_no_temp++;
+        if (IsSource(source_formid)) {
+            for (const auto dynamic_formid : DFT->GetFormSet(source_formid, source_editorid)) {
+                DFT->Reserve(source_formid, source_editorid,dynamic_formid);
             }
-        }
-    }
+		}
+	}
 
     DFT->ApplyMissingActiveEffects();
 
