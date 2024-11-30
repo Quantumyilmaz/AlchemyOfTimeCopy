@@ -106,6 +106,24 @@ std::string_view Source::GetName() const {
     return "";
 }
 
+void Source::UpdateAddons()
+{
+	const auto* form = GetFormByID(formid, editorid);
+	if (!form) {
+		logger::error("UpdateAddons: Form not found.");
+		return;
+	}
+	if (auto* addon = Settings::GetAddOnSettings(form); addon && addon->IsHealthy()) {
+		settings.Add(*addon);
+	}
+
+    if (!settings.CheckIntegrity()) {
+        logger::critical("Default settings integrity check failed.");
+		InitFailed();
+		return;
+	}
+}
+
 std::map<RefID, std::vector<StageUpdate>> Source::UpdateAllStages(const std::vector<RefID>& filter, const float time) {
     logger::trace("Updating all stages.");
     if (init_failed) {
@@ -1114,7 +1132,7 @@ void Source::SearchModulatorInCell(FormID& result, const RE::TESObjectREFR* a_or
                                    const RE::TESObjectCELL* a_cell, const std::set<FormID>& modulators, const float range) {
     if (range>0) {
         a_cell->ForEachReferenceInRange(WorldObject::GetPosition(a_origin), range,
-                                        [&result, &modulators](RE::TESObjectREFR* ref)-> RE::BSContainer::ForEachResult {
+                                        [&result, &modulators](const RE::TESObjectREFR* ref)-> RE::BSContainer::ForEachResult {
                                             if (!ref || ref->IsDisabled() || ref->IsDeleted() || ref->IsMarkedForDeletion()) return RE::BSContainer::ForEachResult::kContinue;
                                             if (const auto form_id = ref->GetObjectReference()->GetFormID(); modulators.contains(form_id)) {
                                                 result = form_id;
@@ -1126,7 +1144,7 @@ void Source::SearchModulatorInCell(FormID& result, const RE::TESObjectREFR* a_or
     }
     else {
 		a_cell->ForEachReference(
-			[&a_origin,&result, &modulators](RE::TESObjectREFR* ref)-> RE::BSContainer::ForEachResult {
+			[&a_origin,&result, &modulators](const RE::TESObjectREFR* ref)-> RE::BSContainer::ForEachResult {
 				if (!ref || ref->IsDisabled() || ref->IsDeleted() || ref->IsMarkedForDeletion()) return RE::BSContainer::ForEachResult::kContinue;
 				if (const auto form_id = ref->GetObjectReference()->GetFormID(); modulators.contains(form_id)) {
                     if (!WorldObject::IsNextTo(a_origin, ref, Settings::proximity_range)) {

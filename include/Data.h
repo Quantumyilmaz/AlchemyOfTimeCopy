@@ -24,6 +24,8 @@ struct Source {
 
     [[maybe_unused]] [[nodiscard]] std::string_view GetName() const;
 
+    void UpdateAddons();
+
     [[nodiscard]] RE::TESBoundObject* GetBoundObject() const { return GetFormByID<RE::TESBoundObject>(formid, editorid); };
 
     std::map<RefID,std::vector<StageUpdate>> UpdateAllStages(const std::vector<RefID>& filter, float time);

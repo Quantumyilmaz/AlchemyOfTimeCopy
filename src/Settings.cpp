@@ -259,6 +259,26 @@ AddOnSettings parseAddOns_(const YAML::Node& config)
 		if (modulator["color"] && !modulator["color"].IsNull()) {
 			settings.delayer_colors[temp_formid] = std::stoul(modulator["color"].as<std::string>(), nullptr, 16);
         }
+
+		// sounds
+		if (modulator["sound"] && !modulator["sound"].IsNull()) {
+			const auto sound_formid = GetFormEditorIDFromString(modulator["sound"].as<std::string>());
+			settings.delayer_sounds[temp_formid] = sound_formid;
+        }
+
+		// art_objects
+		if (modulator["art_object"] && !modulator["art_object"].IsNull()) {
+			const auto art_formid = GetFormEditorIDFromString(modulator["art_object"].as<std::string>());
+			settings.delayer_artobjects[temp_formid] = art_formid;
+        }
+
+		// effect_shaders
+		if (modulator["effect_shader"] && !modulator["effect_shader"].IsNull()) {
+			const auto shader_formid = GetFormEditorIDFromString(modulator["effect_shader"].as<std::string>());
+			settings.delayer_effect_shaders[temp_formid] = shader_formid;
+        }
+
+
     }
 
 	// transformers
@@ -298,6 +318,24 @@ AddOnSettings parseAddOns_(const YAML::Node& config)
 		// colors
 		if (transformer["color"] && !transformer["color"].IsNull()) {
 			settings.transformer_colors[temp_formid] = std::stoul(transformer["color"].as<std::string>(), nullptr, 16);
+        }
+
+		// sounds
+		if (transformer["sound"] && !transformer["sound"].IsNull()) {
+			const auto sound_formid = GetFormEditorIDFromString(transformer["sound"].as<std::string>());
+			settings.transformer_sounds[temp_formid] = sound_formid;
+        }
+
+		// art_objects
+		if (transformer["art_object"] && !transformer["art_object"].IsNull()) {
+			const auto art_formid = GetFormEditorIDFromString(transformer["art_object"].as<std::string>());
+			settings.transformer_artobjects[temp_formid] = art_formid;
+        }
+
+		// effect_shaders
+		if (transformer["effect_shader"] && !transformer["effect_shader"].IsNull()) {
+			const auto shader_formid = GetFormEditorIDFromString(transformer["effect_shader"].as<std::string>());
+			settings.transformer_effect_shaders[temp_formid] = shader_formid;
         }
     }
         
@@ -472,6 +510,28 @@ DefaultSettings parseDefaults_(const YAML::Node& config)
 			settings.colors[temp_no] = std::stoul(stageNode["color"].as<std::string>(), nullptr, 16);
 		}
 		else settings.colors[temp_no] = 0;
+
+		// add to sounds
+		logger::trace("Sound");
+		if (stageNode["sound"] && !stageNode["sound"].IsNull()) {
+			const auto sound_formid = GetFormEditorIDFromString(stageNode["sound"].as<std::string>());
+			settings.sounds[temp_no] = sound_formid;
+        }
+
+		// add to art_objects
+		logger::trace("ArtObject");
+		if (stageNode["art_object"] && !stageNode["art_object"].IsNull()) {
+			const auto art_formid = GetFormEditorIDFromString(stageNode["art_object"].as<std::string>());
+			settings.artobjects[temp_no] = art_formid;
+        }
+
+		// add to effect_shaders
+		logger::trace("EffectShader");
+		if (stageNode["effect_shader"] && !stageNode["effect_shader"].IsNull()) {
+			const auto shader_formid = GetFormEditorIDFromString(stageNode["effect_shader"].as<std::string>());
+			settings.effect_shaders[temp_no] = shader_formid;
+        }
+
     }
     // final formid
     logger::trace("terminal item");
@@ -515,6 +575,25 @@ DefaultSettings parseDefaults_(const YAML::Node& config)
 		if (modulator["color"] && !modulator["color"].IsNull()) {
 			settings.delayer_colors[temp_formid] = std::stoul(modulator["color"].as<std::string>(), nullptr, 16);
         }
+
+		// sounds
+		if (modulator["sound"] && !modulator["sound"].IsNull()) {
+			const auto sound_formid = GetFormEditorIDFromString(modulator["sound"].as<std::string>());
+			settings.delayer_sounds[temp_formid] = sound_formid;
+        }
+
+		// art_objects
+		if (modulator["art_object"] && !modulator["art_object"].IsNull()) {
+			const auto art_formid = GetFormEditorIDFromString(modulator["art_object"].as<std::string>());
+			settings.delayer_artobjects[temp_formid] = art_formid;
+        }
+
+		// effect_shaders
+		if (modulator["effect_shader"] && !modulator["effect_shader"].IsNull()) {
+			const auto shader_formid = GetFormEditorIDFromString(modulator["effect_shader"].as<std::string>());
+			settings.delayer_effect_shaders[temp_formid] = shader_formid;
+        }
+
     }
 
 	// transformers
@@ -558,6 +637,24 @@ DefaultSettings parseDefaults_(const YAML::Node& config)
 		// colors
 		if (transformer["color"] && !transformer["color"].IsNull()) {
 			settings.transformer_colors[temp_formid] = std::stoul(transformer["color"].as<std::string>(), nullptr, 16);
+        }
+
+		// sounds
+		if (transformer["sound"] && !transformer["sound"].IsNull()) {
+			const auto sound_formid = GetFormEditorIDFromString(transformer["sound"].as<std::string>());
+			settings.transformer_sounds[temp_formid] = sound_formid;
+        }
+
+		// art_objects
+		if (transformer["art_object"] && !transformer["art_object"].IsNull()) {
+			const auto art_formid = GetFormEditorIDFromString(transformer["art_object"].as<std::string>());
+			settings.transformer_artobjects[temp_formid] = art_formid;
+        }
+
+		// effect_shaders
+		if (transformer["effect_shader"] && !transformer["effect_shader"].IsNull()) {
+			const auto shader_formid = GetFormEditorIDFromString(transformer["effect_shader"].as<std::string>());
+			settings.transformer_effect_shaders[temp_formid] = shader_formid;
         }
     }
         

@@ -24,16 +24,18 @@ class Manager final : public Ticker, public SaveLoadData {
 
     unsigned int _instance_limit = 200000;
 
-    std::map<RefID, std::pair<float,std::pair<uint32_t,bool>>> _ref_stops_;
+    std::map<RefID, RefStop> _ref_stops_;
     std::set<RefID> queue_delete_;
 
     std::set<FormID> do_not_register;
 
-    void WoUpdateLoop(float curr_time, const std::map<RefID, std::pair<float,uint32_t>>& ref_stops_copy);
+    void WoUpdateLoop(const std::vector<RefID>& refs);
 
     void UpdateLoop();
 
-    void QueueWOUpdate(RefID refid, float stop_t, uint32_t color);
+    void QueueWOUpdate(const RefStop& a_refstop);
+
+    static void UpdateRefStop(Source& src, const StageInstance& wo_inst, RefStop& a_ref_stop, float stop_t);
 
     [[nodiscard]] unsigned int GetNInstances();
 
@@ -75,6 +77,8 @@ class Manager final : public Ticker, public SaveLoadData {
     void UpdateWO(RE::TESObjectREFR* ref);
 	void SyncWithInventory(RE::TESObjectREFR* ref);
     void UpdateRef(RE::TESObjectREFR* loc);
+
+	RefStop* GetRefStop(RefID refid);
 
 public:
     Manager(const std::vector<Source>& data, const std::chrono::milliseconds interval)
@@ -137,11 +141,11 @@ public:
         return sources;
     }
 
-    std::map<RefID, std::pair<float,uint32_t>> GetUpdateQueue() {
+    std::map<RefID, float> GetUpdateQueue() {
+		std::map<RefID, float> _ref_stops_copy;
 		std::shared_lock lock(queueMutex_);
-		std::map<RefID, std::pair<float, uint32_t>> _ref_stops_copy;
 		for (const auto& [key, value] : _ref_stops_) {
-			_ref_stops_copy[key] = {value.first,value.second.first};
+			_ref_stops_copy[key] = value.stop_time;
 		}
         return _ref_stops_copy;
     }

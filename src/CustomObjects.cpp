@@ -4,11 +4,11 @@ bool StageInstance::operator==(const StageInstance& other) const
 {
     return no == other.no && count == other.count && 
         //location == other.location &&
-            start_time == other.start_time && 
-        _elapsed == other._elapsed && xtra == other.xtra;
+            fabs(start_time - other.start_time) < EPSILON && 
+        fabs(_elapsed - other._elapsed) < EPSILON && xtra == other.xtra;
 }
 
-bool StageInstance::AlmostSameExceptCount(StageInstance& other, const float curr_time) const
+bool StageInstance::AlmostSameExceptCount(const StageInstance& other, const float curr_time) const
 {
     // bcs they are in the same inventory they will have same delay magnitude
             // delay starts might be different but if the elapsed times are close enough, we don't care
@@ -270,21 +270,70 @@ void DefaultSettings::Add(AddOnSettings& addon)
 		}
 		transformers[_formID] = _transformer;
     }
-	for (const auto& [_formID, _color] : addon.delayer_colors) {
-        if (!_formID) {
-            logger::critical("AddOn has null formid.");
-	        continue;
-        }
-		delayer_colors[_formID] = _color;
-    }
-	for (const auto& [_formID, _color] : addon.transformer_colors) {
-        if (!_formID) {
-            logger::critical("AddOn has null formid.");
-	        continue;
-        }
-		transformer_colors[_formID] = _color;
-    }
+
+	AddHelper(delayer_colors, addon.delayer_colors);
+	AddHelper(transformer_colors, addon.transformer_colors);
+	AddHelper(delayer_sounds, addon.delayer_sounds);
+	AddHelper(transformer_sounds, addon.transformer_sounds);
+	AddHelper(delayer_artobjects, addon.delayer_artobjects);
+	AddHelper(transformer_artobjects, addon.transformer_artobjects);
+	AddHelper(delayer_effect_shaders, addon.delayer_effect_shaders);
+	AddHelper(transformer_effect_shaders, addon.transformer_effect_shaders);
+
+
 }
+
+void DefaultSettings::AddHelper(std::map<FormID, FormID>& dest, const std::map<FormID, FormID>& src)
+{
+	for (const auto& [_formID, _art] : src) {
+		if (!_formID) {
+			logger::critical("AddOn has null formid.");
+			continue;
+		}
+		dest[_formID] = _art;
+	}
+}
+
+RefStopFeature::operator bool() const { return id > 0 && enabled.load(); }
+
+RefStopFeature::RefStopFeature() {
+	id = 0;
+	enabled = false;
+}
+
+RefStopFeature& RefStopFeature::operator=(const RefStopFeature& other)
+{
+	if (this != &other) {
+		id = other.id;
+		enabled = other.enabled.load();
+	}
+	return *this;
+}
+
+RefStop::~RefStop() {
+	//auto soundhelper = SoundHelper::GetSingleton();
+	//soundhelper->DeleteHandle(ref_id);
+}
+
+RefStop& RefStop::operator=(const RefStop& other) {
+	if (this != &other) {
+        ref_id = other.ref_id;
+        stop_time = other.stop_time;
+        tint_color = other.tint_color;
+        art_object = other.art_object;
+        effect_shader = other.effect_shader;
+        sound = other.sound;
+
+        // Manually handle any special cases for members
+    }
+    return *this;
+}
+
+RefStop::RefStop(const RefID ref_id_) {
+	ref_id = ref_id_;
+}
+
+bool RefStop::IsDue(const float curr_time) const { return stop_time <= curr_time; }
 
 bool AddOnSettings::CheckIntegrity()
 {
@@ -320,4 +369,172 @@ bool AddOnSettings::CheckIntegrity()
 	}
 
 	return true;
+}
+
+void RefStop::ApplyTint(RE::NiAVObject* a_obj3d) {
+	if (!tint_color.id) {
+        return RemoveTint(a_obj3d);
+	}
+    RE::NiColorA color;
+	hexToRGBA(tint_color.id, color);
+	a_obj3d->TintScenegraph(color);
+	tint_color.enabled.store(true);
+}
+
+void RefStop::ApplyArtObject(RE::TESObjectREFR* a_ref, const float duration)
+{
+	if (!art_object.id) return RemoveArtObject();
+	const auto a_art_obj = RE::TESForm::LookupByID<RE::BGSArtObject>(art_object.id);
+	if (!a_art_obj) {
+		logger::error("Art object not found.");
+		return;
+	}
+	const auto a_model_ref_eff_ptr = a_ref->ApplyArtObject(a_art_obj, duration);
+	//model_ref_eff = a_model_ref_eff_ptr;
+
+	art_object.enabled.store(true);
+}
+
+void RefStop::ApplyShader(RE::TESObjectREFR* a_ref, const float duration)
+{
+	if (!effect_shader.id) return RemoveShader();
+	const auto eff_shader = RE::TESForm::LookupByID<RE::TESEffectShader>(effect_shader.id);
+	if (!eff_shader) {
+		logger::error("Shader not found.");
+		return;
+	}
+	const auto a_shader_ref_eff_ptr = a_ref->ApplyEffectShader(eff_shader, duration);
+	//shader_ref_eff = a_shader_ref_eff_ptr;
+
+	effect_shader.enabled.store(true);
+}
+
+void RefStop::ApplySound(const float volume)
+{
+	if (!sound.id) {
+        return RemoveSound();
+	}
+	const auto soundhelper = SoundHelper::GetSingleton();
+	soundhelper->Play(ref_id, sound.id, volume);
+	sound.enabled.store(true);
+}
+
+void RefStop::ApplyAll(RE::TESObjectREFR* a_ref)
+{
+	if (const auto a_obj3d = a_ref->Get3D()) {
+		ApplyTint(a_obj3d);
+	}
+	ApplyArtObject(a_ref);
+	ApplyShader(a_ref);
+	ApplySound();
+}
+
+RE::BSSoundHandle& RefStop::GetSoundHandle() const {
+	auto* soundhelper = SoundHelper::GetSingleton();
+	return soundhelper->GetHandle(ref_id);
+}
+
+
+void RefStop::RemoveTint(RE::NiAVObject* a_obj3d)
+{
+    const auto color = RE::NiColorA(0.0f, 0.0f, 0.0f, 0.0f);
+    a_obj3d->TintScenegraph(color);
+	tint_color.enabled.store(false);
+}
+
+void RefStop::RemoveArtObject()
+{
+	art_object.enabled.store(false);
+}
+
+void RefStop::RemoveShader()
+{
+	effect_shader.enabled.store(false);
+}
+
+void RefStop::RemoveSound()
+{
+	const auto soundhelper = SoundHelper::GetSingleton();
+	soundhelper->Stop(ref_id);
+	sound.enabled.store(false);
+}
+
+void RefStop::Update(const RefStop& other)
+{
+	if (ref_id != other.ref_id) {
+		logger::critical("RefID not the same.");
+		return;
+	}
+	if (tint_color.id != other.tint_color.id) {
+		tint_color.id = other.tint_color.id;
+	}
+	if (art_object.id != other.art_object.id) {
+		art_object.id = other.art_object.id;
+	}
+	if (effect_shader.id != other.effect_shader.id) {
+		effect_shader.id = other.effect_shader.id;
+	}
+	if (sound.id != other.sound.id) {
+		sound.id = other.sound.id;
+	}
+	if (fabs(stop_time - other.stop_time) > EPSILON) {
+		stop_time = other.stop_time;
+	}
+}
+
+void SoundHelper::DeleteHandle(const RefID refid)
+{
+	if (!handles.contains(refid)) return;
+	Stop(refid);
+	std::unique_lock lock(mutex);
+	handles.erase(refid);
+}
+
+void SoundHelper::Stop(const RefID refid)
+{
+	std::shared_lock lock(mutex);
+	if (!handles.contains(refid)) {
+        return;
+	}
+	RE::BSSoundHandle& handle = handles.at(refid);
+	if (!handle.IsPlaying()) {
+		return;
+	}
+	handle.FadeOutAndRelease(100);
+	//handle.Stop();
+}
+
+void SoundHelper::Play(const RefID refid, const FormID sound_id, const float volume)
+{
+	if (!sound_id) return;
+	const auto sound = RE::TESForm::LookupByID<RE::BGSSoundDescriptorForm>(sound_id);
+	if (!sound) {
+		logger::error("Sound not found.");
+		return;
+	}
+	const auto ref = RE::TESForm::LookupByID<RE::TESObjectREFR>(refid);
+	if (!ref) {
+		logger::error("Ref not found.");
+		return;
+	}
+
+	
+	if (!handles.contains(refid)) {
+		std::unique_lock lock(mutex);
+		handles[refid] = RE::BSSoundHandle();
+	}
+
+	auto& sound_handle = handles.at(refid);
+	if (sound_handle.IsPlaying()) {
+		return;
+	}
+	RE::BSAudioManager::GetSingleton()->BuildSoundDataFromDescriptor(sound_handle, sound);
+	sound_handle.SetObjectToFollow(ref->Get3D());
+	sound_handle.SetVolume(volume);
+	if (!sound_handle.IsValid()) {
+		logger::error("SoundHandle not valid.");
+	}
+	else {
+		sound_handle.Play();
+	}
 }

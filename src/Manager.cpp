@@ -1,9 +1,8 @@
 #include "Manager.h"
 
-void Manager::WoUpdateLoop(const float curr_time, const std::map<RefID, std::pair<float, uint32_t>>& ref_stops_copy)
+void Manager::WoUpdateLoop(const std::vector<RefID>& refs)
 {
-    for (auto& [refid, stop_t_color] : ref_stops_copy) {
-        if (stop_t_color.first > curr_time) continue;
+    for (auto& refid : refs) {
 		if (const auto ref = RE::TESForm::LookupByID<RE::TESObjectREFR>(refid)) {
 			{
                 std::unique_lock lock(queueMutex_);
@@ -16,79 +15,109 @@ void Manager::WoUpdateLoop(const float curr_time, const std::map<RefID, std::pai
 
 void Manager::UpdateLoop()
 {
-	{
-        if (!Settings::world_objects_evolve.load()) {
-            const auto ref_stops_copy = _ref_stops_;
-            for (const auto key : ref_stops_copy | std::views::keys) {
-                if (const auto ref = RE::TESForm::LookupByID<RE::TESObjectREFR>(key); ref) {
-                    if (const auto obj3d = ref->Get3D()) {
-						const auto color = RE::NiColorA(0.0f, 0.0f, 0.0f, 0.0f);
-                        obj3d->TintScenegraph(color);
-                    }
+	std::unique_lock lock(queueMutex_);
+	std::vector<RefID> ref_stops_copy;
+    for (
+        //auto lock = std::shared_lock(queueMutex_);
+        const auto& key : _ref_stops_ | std::views::keys) {
+        ref_stops_copy.push_back(key);
+    } 
+    if (!Settings::world_objects_evolve.load()) {
+        for (const auto& key : ref_stops_copy) {
+            if (const auto ref = RE::TESForm::LookupByID<RE::TESObjectREFR>(key); ref) {
+                if (const auto obj3d = ref->Get3D()) {
+                    //std::shared_lock lock(queueMutex_);
+					if (_ref_stops_.contains(key)) _ref_stops_.at(key).RemoveTint(obj3d);
                 }
             }
-	        std::unique_lock lock(queueMutex_);
-            _ref_stops_.clear();
         }
-        if (_ref_stops_.empty()) {
-            Stop();
-	        std::unique_lock lock(queueMutex_);
-            queue_delete_.clear();
-            return;
-        }
-	    if (!queue_delete_.empty()) {
-	        for (auto it = _ref_stops_.begin(); it != _ref_stops_.end();) {
-                if (queue_delete_.contains(it->first)) {
-	                std::unique_lock lock(queueMutex_);
-	                it = _ref_stops_.erase(it);
-                }
-                else ++it;
-	        }
-		    queue_delete_.clear();
-        }
-	}
+	    //std::unique_lock lock(queueMutex_);
+        _ref_stops_.clear();
+    }
+    if (_ref_stops_.empty()) {
+        Stop();
+        queue_delete_.clear();
+        return;
+    }
+	if (!queue_delete_.empty()) {
+	    for (auto it = _ref_stops_.begin(); it != _ref_stops_.end();) {
+            if (queue_delete_.contains(it->first)) {
+	            //std::unique_lock lock(queueMutex_);
+	            it = _ref_stops_.erase(it);
+            }
+            else ++it;
+	    }
+        //std::unique_lock lock(queueMutex_);
+		queue_delete_.clear();
+    }
 
     if (const auto ui = RE::UI::GetSingleton(); ui && ui->GameIsPaused()) return;
 
 	// new mechanic: WO can also be affected by time modulators
 	// Update _ref_stops_ with the new times
-    std::map<RefID, std::pair<float, uint32_t>> _ref_stops_copy;
-    for (const auto& [key, value] : _ref_stops_) {
-		_ref_stops_copy[key] = {value.first,value.second.first};
-    }
-    for (const auto key : _ref_stops_copy | std::views::keys) {
+    for (const auto& key : ref_stops_copy) {
         if (const auto ref = RE::TESForm::LookupByID<RE::TESObjectREFR>(key); ref) {
+			lock.unlock();
             Update(ref);
-            if (const auto obj3d = ref->Get3D()) {
-                if (_ref_stops_.contains(key) && _ref_stops_.at(key).second.second) {
-                    if (!_ref_stops_[key].second.first) {
-                        const auto color = RE::NiColorA(0.0f, 0.0f, 0.0f, 0.0f);
-                        obj3d->TintScenegraph(color);
-				    }
-				    else {
-					    RE::NiColorA color;
-					    hexToRGBA(_ref_stops_[key].second.first, color);
-					    obj3d->TintScenegraph(color);
-				    }
-                    _ref_stops_.at(key).second.second = false;
-                }
-            }
+			lock.lock();
+        }
+    }
+
+    for (const auto& key : ref_stops_copy) {
+        if (const auto ref = RE::TESForm::LookupByID<RE::TESObjectREFR>(key); ref) {
+			//std::shared_lock lock(queueMutex_);
+            if (_ref_stops_.contains(key)) _ref_stops_.at(key).ApplyAll(ref);
         }
     }
 
     if (const auto cal = RE::Calendar::GetSingleton()) {
-        WoUpdateLoop(cal->GetHoursPassed(), _ref_stops_copy);
+        // make copy with only stops
+        const auto curr_time = cal->GetHoursPassed();
+		std::vector<RefID> ref_stops_copy2;
+		for (
+            //auto lock = std::shared_lock(queueMutex_);
+            const auto& [key,val] : _ref_stops_) {
+            if (val.IsDue(curr_time)) ref_stops_copy2.push_back(key);
+		}
+        lock.unlock();
+        WoUpdateLoop(ref_stops_copy2);
     }
     Start();
 }
 
-void Manager::QueueWOUpdate(const RefID refid, const float stop_t, const uint32_t color)
+void Manager::QueueWOUpdate(const RefStop& a_refstop)
 {
     if (!Settings::world_objects_evolve.load()) return;
+	const auto refid = a_refstop.ref_id;
     std::unique_lock lock(queueMutex_);
-	_ref_stops_[refid] = { stop_t, {color,true} };
+    if (_ref_stops_.contains(refid)) _ref_stops_.at(refid).Update(a_refstop);
+    else {
+        _ref_stops_[refid] = a_refstop;
+    }
     Start();
 }
+
+void Manager::UpdateRefStop(Source& src, const StageInstance& wo_inst, RefStop& a_ref_stop, const float stop_t) {
+	const auto wo_inst_delayer = wo_inst.GetDelayerFormID();
+    // color
+    const auto color = wo_inst.xtra.is_transforming ? src.settings.transformer_colors[wo_inst_delayer] : wo_inst_delayer  ? src.settings.delayer_colors[wo_inst_delayer ] : src.settings.colors[wo_inst.no];
+	a_ref_stop.tint_color.id = color;
+	// art object
+	const auto art_object = wo_inst.xtra.is_transforming ? src.settings.transformer_artobjects[wo_inst_delayer] : wo_inst_delayer  ? src.settings.delayer_artobjects[wo_inst_delayer] : src.settings.artobjects[wo_inst.no];
+	a_ref_stop.art_object.id = art_object;
+
+	// effect shader
+	const auto effect_shader = wo_inst.xtra.is_transforming ? src.settings.transformer_effect_shaders[wo_inst_delayer] : wo_inst_delayer ? src.settings.delayer_effect_shaders[wo_inst_delayer] : src.settings.effect_shaders[wo_inst.no];
+	a_ref_stop.effect_shader.id = effect_shader;
+
+	// sound
+	const auto sound = wo_inst.xtra.is_transforming ? src.settings.transformer_sounds[wo_inst_delayer] : wo_inst_delayer ? src.settings.delayer_sounds[wo_inst_delayer] : src.settings.sounds[wo_inst.no];
+	a_ref_stop.sound.id = sound;
+
+    a_ref_stop.stop_time = stop_t;
+
+}
+
 
 unsigned int Manager::GetNInstances() {
     unsigned int n = 0;
@@ -206,6 +235,11 @@ void Manager::ApplyStageInWorld(RE::TESObjectREFR* wo_ref, const Stage& stage, R
         WorldObject::SwapObjects(wo_ref, source_bound);
         ApplyStageInWorld_Fake(wo_ref, stage.GetExtraText());
     }
+	//SKSE::GetTaskInterface()->AddTask([wo_ref]() {
+	//	if (auto a_obj = wo_ref->Get3D()) {
+	//		a_obj->art
+	//	}
+	//});
 }
 
 inline void Manager::ApplyEvolutionInInventoryX(RE::TESObjectREFR* inventory_owner, Count update_count, FormID old_item, FormID new_item)
@@ -601,19 +635,19 @@ void Manager::UpdateWO(RE::TESObjectREFR* ref)
             if (src.IsDecayedItem(update.newstage->formid)) {
                 logger::trace("UpdateWO: Decayed item. Source formid {} editorid {}", src.formid, src.editorid);
 		        Register(update.newstage->formid, update.count, refid, update.update_time);
-				//return UpdateWO(ref);
             }
         }
 
 		src = sources[i];
 		if (!src.data.contains(refid)) logger::error("UpdateWO: Refid {} not found in source data.", refid);
         auto& wo_inst = src.data.at(refid).front();
-  //      wo_inst.RemoveTimeMod(curr_time); // handledrop. eer daa onceden removedsa bisey yapmiyo zaten
-		//if (!src.settings.containers.empty()) wo_inst.SetDelay(curr_time, 0, 0);
         if (wo_inst.xtra.is_fake) ApplyStageInWorld(ref, src.GetStage(wo_inst.no), src.GetBoundObject());
         src.UpdateTimeModulationInWorld(ref,wo_inst,curr_time);
-		const auto color = wo_inst.xtra.is_transforming ? src.settings.transformer_colors[wo_inst.GetDelayerFormID()] : wo_inst.GetDelayerFormID() ? src.settings.delayer_colors[wo_inst.GetDelayerFormID()] : src.settings.colors[wo_inst.no];
-        if (const auto next_update = src.GetNextUpdateTime(&wo_inst); next_update > curr_time) QueueWOUpdate(refid, next_update, color);
+        if (const auto next_update = src.GetNextUpdateTime(&wo_inst); next_update > curr_time) {
+			RefStop a_ref_stop(refid);
+			UpdateRefStop(src, wo_inst, a_ref_stop, next_update);
+            QueueWOUpdate(a_ref_stop);
+        }
 		break;
     }
 
@@ -630,6 +664,12 @@ void Manager::UpdateRef(RE::TESObjectREFR* loc)
 		if (src.data.empty()) continue;
 		CleanUpSourceData(&src);
 	}
+}
+
+RefStop* Manager::GetRefStop(const RefID refid)
+{
+	if (!_ref_stops_.contains(refid)) return nullptr;
+	return &_ref_stops_.at(refid);
 }
 
 bool Manager::RefIsRegistered(const RefID refid) {
@@ -730,7 +770,9 @@ void Manager::Register(const FormID some_formid, const Count count, const RefID 
             ApplyStageInWorld(ref, src->GetStage(stage_no), bound);
 		    // add to the queue
 		    const auto hitting_time = src->GetNextUpdateTime(inserted_instance);
-			QueueWOUpdate(location_refid, hitting_time, src->settings.colors[stage_no]);
+            RefStop a_ref_stop(location_refid);
+            UpdateRefStop(*src,*inserted_instance,a_ref_stop, hitting_time);
+			QueueWOUpdate(a_ref_stop);
         }
     }
 }
@@ -859,8 +901,10 @@ void Manager::Update(RE::TESObjectREFR* from, RE::TESObjectREFR* to, const RE::T
     if (to_is_world_object) count = to->extraList.GetCount();
 
     if (from && to && !from->HasContainer()) {
-		std::unique_lock lock(queueMutex_);
-        if (const auto temp_refid = from->GetFormID(); _ref_stops_.contains(temp_refid)) queue_delete_.insert(temp_refid);
+        if (const auto temp_refid = from->GetFormID(); _ref_stops_.contains(temp_refid)) {
+		    std::unique_lock lock(queueMutex_);
+            queue_delete_.insert(temp_refid);
+        }
     }
 
     if (RE::UI::GetSingleton()->IsMenuOpen(RE::BarterMenu::MENU_NAME)){
@@ -1073,6 +1117,12 @@ StageInstance* Manager::RegisterAtReceiveData(const FormID source_formid, const 
             return nullptr;
         }
 
+        //src->UpdateAddons();
+		if (!src->IsHealthy()) {
+			logger::warn("RegisterAtReceiveData: Source is not healthy.");
+			return nullptr;
+		}
+
         const auto stage_no = st_plain.no;
         if (!src->IsStageNo(stage_no)) {
             logger::warn("Stage not found.");
@@ -1229,6 +1279,7 @@ void Manager::HandleWOBaseChange(RE::TESObjectREFR* ref)
 		if (!st_inst || st_inst->count <= 0) return;
         if (const auto* bound_expected = src->IsFakeStage(st_inst->no) ? src->GetBoundObject() : st_inst->GetBound(); bound_expected->GetFormID() != bound->GetFormID()) {
 	        st_inst->count = 0;
+			std::unique_lock lock(sourceMutex_);
 			queue_delete_.insert(ref->GetFormID());
         }
 	}
