@@ -15,39 +15,41 @@ void Manager::WoUpdateLoop(const std::vector<RefID>& refs)
 
 void Manager::UpdateLoop()
 {
-	std::unique_lock lock(queueMutex_);
+	//std::unique_lock lock(queueMutex_);
 	std::vector<RefID> ref_stops_copy;
     for (
-        //auto lock = std::shared_lock(queueMutex_);
+        auto lock = std::shared_lock(queueMutex_);
         const auto& key : _ref_stops_ | std::views::keys) {
         ref_stops_copy.push_back(key);
     } 
     if (!Settings::world_objects_evolve.load()) {
-        for (const auto& key : ref_stops_copy) {
+        for (
+            //auto lock = std::shared_lock(queueMutex_);
+            const auto& key : ref_stops_copy) {
             if (const auto ref = RE::TESForm::LookupByID<RE::TESObjectREFR>(key); ref) {
                 if (const auto obj3d = ref->Get3D()) {
-                    //std::shared_lock lock(queueMutex_);
+                    std::shared_lock lock(queueMutex_);
 					if (_ref_stops_.contains(key)) _ref_stops_.at(key).RemoveTint(obj3d);
                 }
             }
         }
-	    //std::unique_lock lock(queueMutex_);
+	    std::unique_lock lock(queueMutex_);
         _ref_stops_.clear();
     }
     if (_ref_stops_.empty()) {
         Stop();
+	    std::unique_lock lock(queueMutex_);
         queue_delete_.clear();
         return;
     }
-	if (!queue_delete_.empty()) {
+	if (std::unique_lock lock(queueMutex_);
+        !queue_delete_.empty()) {
 	    for (auto it = _ref_stops_.begin(); it != _ref_stops_.end();) {
             if (queue_delete_.contains(it->first)) {
-	            //std::unique_lock lock(queueMutex_);
 	            it = _ref_stops_.erase(it);
             }
             else ++it;
 	    }
-        //std::unique_lock lock(queueMutex_);
 		queue_delete_.clear();
     }
 
@@ -57,15 +59,13 @@ void Manager::UpdateLoop()
 	// Update _ref_stops_ with the new times
     for (const auto& key : ref_stops_copy) {
         if (const auto ref = RE::TESForm::LookupByID<RE::TESObjectREFR>(key); ref) {
-			lock.unlock();
             Update(ref);
-			lock.lock();
         }
     }
 
     for (const auto& key : ref_stops_copy) {
         if (const auto ref = RE::TESForm::LookupByID<RE::TESObjectREFR>(key); ref) {
-			//std::shared_lock lock(queueMutex_);
+			std::shared_lock lock(queueMutex_);
             if (_ref_stops_.contains(key)) _ref_stops_.at(key).ApplyAll(ref);
         }
     }
@@ -75,11 +75,10 @@ void Manager::UpdateLoop()
         const auto curr_time = cal->GetHoursPassed();
 		std::vector<RefID> ref_stops_copy2;
 		for (
-            //auto lock = std::shared_lock(queueMutex_);
+            auto lock = std::shared_lock(queueMutex_);
             const auto& [key,val] : _ref_stops_) {
             if (val.IsDue(curr_time)) ref_stops_copy2.push_back(key);
 		}
-        lock.unlock();
         WoUpdateLoop(ref_stops_copy2);
     }
     Start();
@@ -89,9 +88,9 @@ void Manager::QueueWOUpdate(const RefStop& a_refstop)
 {
     if (!Settings::world_objects_evolve.load()) return;
 	const auto refid = a_refstop.ref_id;
-    std::unique_lock lock(queueMutex_);
     if (_ref_stops_.contains(refid)) _ref_stops_.at(refid).Update(a_refstop);
     else {
+        std::unique_lock lock(queueMutex_);
         _ref_stops_[refid] = a_refstop;
     }
     Start();
@@ -532,7 +531,9 @@ void Manager::SyncWithInventory(RE::TESObjectREFR* ref)
     std::map<FormID, std::vector<StageInstance*>> formid_instances_map = {};
     std::map<FormID, Count> total_registry_counts = {};
 
-    for (auto& src : sources) {
+    for (
+        //auto lock = std::shared_lock(sourceMutex_);
+        auto& src : sources) {
         if (src.data.empty()) continue;
         if (!src.data.contains(loc_refid)) continue;
         for (auto& st_inst : src.data.at(loc_refid)) {  // bu liste onceski savele ayni deil cunku source.datayi
@@ -803,8 +804,9 @@ void Manager::HandleCraftingEnter(unsigned int bench_type)
     std::map<FormID, int> to_remove;
     const auto player_inventory = player_ref->GetInventory();
 
-	std::shared_lock lock(sourceMutex_);
-    for (auto& src : sources) {
+    for (
+        std::shared_lock lock(sourceMutex_);
+        auto& src : sources) {
 		if (!src.IsHealthy()) continue;
         if (!src.data.contains(player_refid)) continue;
         
@@ -1279,7 +1281,7 @@ void Manager::HandleWOBaseChange(RE::TESObjectREFR* ref)
 		if (!st_inst || st_inst->count <= 0) return;
         if (const auto* bound_expected = src->IsFakeStage(st_inst->no) ? src->GetBoundObject() : st_inst->GetBound(); bound_expected->GetFormID() != bound->GetFormID()) {
 	        st_inst->count = 0;
-			std::unique_lock lock(sourceMutex_);
+			std::unique_lock lock(queueMutex_);
 			queue_delete_.insert(ref->GetFormID());
         }
 	}
