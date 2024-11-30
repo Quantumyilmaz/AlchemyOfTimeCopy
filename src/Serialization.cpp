@@ -1,7 +1,7 @@
 #include "Serialization.h"
 
 
-bool read_string(SKSE::SerializationInterface* a_intfc, std::string& a_str)
+bool read_string(const SKSE::SerializationInterface* a_intfc, std::string& a_str)
 {
     std::vector<std::pair<int, bool>> encodedStr;
 	std::size_t size;
@@ -19,7 +19,7 @@ bool read_string(SKSE::SerializationInterface* a_intfc, std::string& a_str)
 	return true;
 }
 
-bool write_string(SKSE::SerializationInterface* a_intfc, const std::string& a_str)
+bool write_string(const SKSE::SerializationInterface* a_intfc, const std::string& a_str)
 {
     const auto encodedStr = encodeString(a_str);
     // i first need the size to know no of iterations

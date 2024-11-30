@@ -656,10 +656,10 @@ void UI::Refresh()
     for (const auto [refid, stop_time] : M->GetUpdateQueue()) {
 		if (const auto ref = RE::TESForm::LookupByID<RE::TESObjectREFR>(refid)) {
 			std::string temp_name = std::format("{} ({:x})", ref->GetName(), refid);
-			update_q[refid] = std::make_pair(temp_name, stop_time.first);
+			update_q[refid] = std::make_pair(temp_name, stop_time);
 		}
         else {
-			update_q[refid] = std::make_pair(std::format("{:x}", refid), stop_time.first);
+			update_q[refid] = std::make_pair(std::format("{:x}", refid), stop_time);
 		}
     }
 }

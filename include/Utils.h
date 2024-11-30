@@ -24,7 +24,6 @@ const auto po3_err_msgbox = std::format(
 const auto general_err_msgbox = std::format("{}: Something went wrong. Please contact the mod author.", mod_name);
 const auto init_err_msgbox = std::format("{}: The mod failed to initialize and will be terminated.", mod_name);
 
-
 void SetupLog();
 std::filesystem::path GetLogPath();
 std::vector<std::string> ReadLogFile();
@@ -372,7 +371,7 @@ namespace Inventory {
 
     inline std::int32_t GetItemCount(RE::TESBoundObject* item, RE::TESObjectREFR* inventory_owner);
 
-    bool IsQuestItem(const FormID formid, RE::TESObjectREFR* inv_owner);
+    bool IsQuestItem(FormID formid, RE::TESObjectREFR* inv_owner);
 
     /*template <typename T>
     void UpdateItemList() {

@@ -1,6 +1,8 @@
 #include "Utils.h"
 
 #include <numbers>
+
+#include "FormIDReader.h"
 #include "Settings.h"
 
 bool Types::FormEditorID::operator<(const FormEditorID& other) const
@@ -73,7 +75,7 @@ std::vector<std::string> ReadLogFile()
     return logLines;
 }
 
-std::string DecodeTypeCode(std::uint32_t typeCode)
+std::string DecodeTypeCode(const std::uint32_t typeCode)
 {
     char buf[4];
     buf[3] = char(typeCode);
@@ -170,13 +172,21 @@ bool isValidHexWithLength7or8(const char* input)
 std::string GetEditorID(const FormID a_formid) {
     if (const auto form = RE::TESForm::LookupByID(a_formid)) {
         return clib_util::editorID::get_editorID(form);
-    } else {
-        return "";
     }
+    return "";
 }
 
 FormID GetFormEditorIDFromString(const std::string& formEditorId)
 {
+	constexpr std::string delimiter = "~";
+	const auto plugin_and_localid = FormReader::split(formEditorId, delimiter);
+	if (plugin_and_localid.size() == 2) {
+		const auto& plugin_name = plugin_and_localid[1];
+		const auto local_id = FormReader::GetFormIDFromString(plugin_and_localid[0]);
+		const auto formid = FormReader::GetForm(plugin_name.c_str(), local_id);
+		if (const auto form = RE::TESForm::LookupByID(formid)) return form->GetFormID();
+	}
+
     if (isValidHexWithLength7or8(formEditorId.c_str())) {
         int form_id_;
         std::stringstream ss;
@@ -196,7 +206,7 @@ FormID GetFormEditorIDFromString(const std::string& formEditorId)
     return 0;
 }
 
-inline bool FormIsOfType(const RE::TESForm* form, RE::FormType type)
+inline bool FormIsOfType(const RE::TESForm* form, const RE::FormType type)
 {
     if (!form) return false;
     return form->Is(type);
@@ -412,7 +422,7 @@ int16_t WorldObject::GetObjectCount(RE::TESObjectREFR* ref) {
     return 0;
 }
 
-void WorldObject::SetObjectCount(RE::TESObjectREFR* ref, Count count)
+void WorldObject::SetObjectCount(RE::TESObjectREFR* ref, const Count count)
 {
     if (!ref) {
         logger::error("Ref is null.");
@@ -481,6 +491,7 @@ void WorldObject::SwapObjects(RE::TESObjectREFR* a_from, RE::TESBoundObject* a_t
     a_from->SetObjectReference(a_to);
     if (!apply_havok) return;
     SKSE::GetTaskInterface()->AddTask([a_from]() {
+		//a_from->Release3DRelatedData();
 		a_from->Disable();
 		a_from->Enable(false);
 	});
@@ -642,7 +653,7 @@ RE::NiPoint3 WorldObject::GetPosition(const RE::TESObjectREFR* obj)
     return newPosition;
 }
 
-bool WorldObject::IsNextTo(const RE::TESObjectREFR* a_obj, const RE::TESObjectREFR* a_target, float range)
+bool WorldObject::IsNextTo(const RE::TESObjectREFR* a_obj, const RE::TESObjectREFR* a_target, const float range)
 {
 	//logger::info("a_obj {} bound_max {} bound_min {}", a_obj->GetName(), a_obj->GetBoundMax().Length(), a_obj->GetBoundMin().Length());
 	//logger::info("a_target {} bound_max {} bound_min {}", a_target->GetName(), a_target->GetBoundMax().Length(), a_target->GetBoundMin().Length());
@@ -704,7 +715,7 @@ bool String::includesWord(const std::string& input, const std::vector<std::strin
         lowerStr = trim(lowerStr);
         lowerStr = " " + lowerStr + " ";  // Add spaces to the beginning and end of the string
         std::ranges::transform(lowerStr, lowerStr.begin(),
-                               [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+                               [](const unsigned char c) { return static_cast<char>(std::tolower(c)); });
                     
         //logger::trace("lowerInput: {} lowerStr: {}", lowerInput, lowerStr);
 
@@ -1004,7 +1015,7 @@ bool xData::UpdateExtras(RE::ExtraDataList* copy_from, RE::ExtraDataList* copy_t
     return true;
 }
 
-void Math::LinAlg::R3::rotateX(RE::NiPoint3& v, float angle)
+void Math::LinAlg::R3::rotateX(RE::NiPoint3& v, const float angle)
 {
     const float y = v.y * cos(angle) - v.z * sin(angle);
     const float z = v.y * sin(angle) + v.z * cos(angle);
@@ -1012,7 +1023,7 @@ void Math::LinAlg::R3::rotateX(RE::NiPoint3& v, float angle)
     v.z = z;
 }
 
-void Math::LinAlg::R3::rotateY(RE::NiPoint3& v, float angle)
+void Math::LinAlg::R3::rotateY(RE::NiPoint3& v, const float angle)
 {
     const float x = v.x * cos(angle) + v.z * sin(angle);
     const float z = -v.x * sin(angle) + v.z * cos(angle);
@@ -1020,7 +1031,7 @@ void Math::LinAlg::R3::rotateY(RE::NiPoint3& v, float angle)
     v.z = z;
 }
 
-void Math::LinAlg::R3::rotateZ(RE::NiPoint3& v, float angle)
+void Math::LinAlg::R3::rotateZ(RE::NiPoint3& v, const float angle)
 {
     const float x = v.x * cos(angle) - v.y * sin(angle);
     const float y = v.x * sin(angle) + v.y * cos(angle);
@@ -1028,7 +1039,7 @@ void Math::LinAlg::R3::rotateZ(RE::NiPoint3& v, float angle)
     v.y = y;
 }
 
-void Math::LinAlg::R3::rotate(RE::NiPoint3& v, float angleX, float angleY, float angleZ)
+void Math::LinAlg::R3::rotate(RE::NiPoint3& v, const float angleX, const float angleY, const float angleZ)
 {
     rotateX(v, angleX);
 	rotateY(v, angleY);
@@ -1041,14 +1052,14 @@ bool Inventory::EntryHasXData(const RE::InventoryEntryData* entry) {
 }
 
 bool Inventory::HasItemEntry(RE::TESBoundObject* item, RE::TESObjectREFR* inventory_owner,
-                             bool nonzero_entry_check) {
+                             const bool nonzero_entry_check) {
     if (!item) {
         logger::warn("Item is null");
-        return 0;
+        return false;
     }
     if (!inventory_owner) {
         logger::warn("Inventory owner is null");
-        return 0;
+        return false;
     }
     auto inventory = inventory_owner->GetInventory();
     const auto it = inventory.find(item);
@@ -1069,7 +1080,7 @@ std::int32_t Inventory::GetItemCount(RE::TESBoundObject* item, RE::TESObjectREFR
 bool Inventory::IsQuestItem(const FormID formid, RE::TESObjectREFR* inv_owner)
 {
     const auto inventory = inv_owner->GetInventory();
-    const auto item = GetFormByID<RE::TESBoundObject>(formid);
+    auto item = GetFormByID<RE::TESBoundObject>(formid);
     if (item) {
         if (const auto it = inventory.find(item); it != inventory.end()) {
             if (it->second.second->IsQuestObject()) return true;

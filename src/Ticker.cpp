@@ -13,7 +13,7 @@ void Ticker::Start()
     }
 }
 
-void Ticker::UpdateInterval(std::chrono::milliseconds newInterval)
+void Ticker::UpdateInterval(const std::chrono::milliseconds newInterval)
 {
     m_IntervalMutex.lock();
     m_Interval = newInterval;

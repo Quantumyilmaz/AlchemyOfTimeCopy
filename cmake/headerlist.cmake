@@ -11,4 +11,5 @@ set(headers ${headers}
 	include/CustomObjects.h
 	include/DynamicFormTracker.h
 	include/Data.h
+	include/FormIDReader.h
 )
