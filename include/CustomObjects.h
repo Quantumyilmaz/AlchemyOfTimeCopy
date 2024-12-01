@@ -257,7 +257,6 @@ public:
 		return handles.at(refid);
 	}
 
-    RE::BSSoundHandle& BuildHandle(const RefID refid);
 	void DeleteHandle(RefID refid);
 
 

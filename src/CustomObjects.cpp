@@ -500,7 +500,7 @@ void SoundHelper::Stop(const RefID refid)
 	if (!handle.IsPlaying()) {
 		return;
 	}
-	handle.FadeOutAndRelease(100);
+	handle.FadeOutAndRelease(1000);
 	//handle.Stop();
 }
 
@@ -535,6 +535,6 @@ void SoundHelper::Play(const RefID refid, const FormID sound_id, const float vol
 		logger::error("SoundHandle not valid.");
 	}
 	else {
-		sound_handle.Play();
+		sound_handle.FadeInPlay(1000);
 	}
 }
