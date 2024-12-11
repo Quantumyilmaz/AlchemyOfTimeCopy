@@ -29,7 +29,7 @@ void Manager::UpdateLoop()
             if (const auto ref = RE::TESForm::LookupByID<RE::TESObjectREFR>(key); ref) {
                 if (const auto obj3d = ref->Get3D()) {
                     std::shared_lock lock(queueMutex_);
-					if (_ref_stops_.contains(key)) _ref_stops_.at(key).RemoveTint(obj3d);
+					if (_ref_stops_.contains(key)) _ref_stops_.at(key).RemoveAll(obj3d);
                 }
             }
         }

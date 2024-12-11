@@ -389,8 +389,11 @@ void RefStop::ApplyArtObject(RE::TESObjectREFR* a_ref, const float duration)
 		logger::error("Art object not found.");
 		return;
 	}
+	//if (applied_art_objects.contains(art_object.id)) return;
+	//if (HasArtObject(a_ref, a_art_obj)) return;
 	const auto a_model_ref_eff_ptr = a_ref->ApplyArtObject(a_art_obj, duration);
 	//model_ref_eff = a_model_ref_eff_ptr;
+	//applied_art_objects.insert(art_object.id);
 
 	art_object.enabled.store(true);
 }
@@ -445,11 +448,36 @@ void RefStop::RemoveTint(RE::NiAVObject* a_obj3d)
 void RefStop::RemoveArtObject()
 {
 	art_object.enabled.store(false);
+	//if (model_ref_eff) model_ref_eff->finished = true;
+
+	//if (applied_art_objects.empty()) return;
+	//if (const auto a_ref = RE::TESForm::LookupByID<RE::TESObjectREFR>(ref_id)) {
+	//    if (const auto processLists = RE::ProcessLists::GetSingleton()) {
+	//	    const auto handle = a_ref->CreateRefHandle();
+	//	    processLists->ForEachModelEffect([&](RE::ModelReferenceEffect* a_modelEffect) {
+	//		    if (a_modelEffect->target == handle && a_modelEffect->artObject) {
+	//				if (applied_art_objects.contains(a_modelEffect->artObject->GetFormID())) {
+	//			        a_modelEffect->lifetime = 3.f;
+	//				}
+	//		    }
+	//		    return RE::BSContainer::ForEachResult::kContinue;
+	//	    });
+	//    }
+	//}
+	//applied_art_objects.clear();
+
 }
 
 void RefStop::RemoveShader()
 {
 	effect_shader.enabled.store(false);
+	//if (shader_ref_eff) shader_ref_eff->finished = true;
+	/*if (const auto a_ref = RE::TESForm::LookupByID<RE::TESObjectREFR>(ref_id)) {
+		if (const auto processLists = RE::ProcessLists::GetSingleton()) {
+			processLists->StopAllMagicEffects(*a_ref);
+		}
+
+	}*/
 }
 
 void RefStop::RemoveSound()
@@ -457,6 +485,30 @@ void RefStop::RemoveSound()
 	const auto soundhelper = SoundHelper::GetSingleton();
 	soundhelper->Stop(ref_id);
 	sound.enabled.store(false);
+}
+
+void RefStop::RemoveAll(RE::NiAVObject* a_obj3d)
+{
+	RemoveTint(a_obj3d);
+	RemoveArtObject();
+	RemoveShader();
+	RemoveSound();
+}
+
+bool RefStop::HasArtObject(RE::TESObjectREFR* a_ref, const RE::BGSArtObject* a_art) {
+	uint32_t count=0;
+	if (const auto processLists = RE::ProcessLists::GetSingleton(); processLists) {
+		const auto handle = a_ref->CreateRefHandle();
+		processLists->ForEachModelEffect([&](const RE::ModelReferenceEffect* a_modelEffect) {
+			if (a_modelEffect->target == handle && a_modelEffect->artObject == a_art) {
+				if (!a_modelEffect->finished) {
+					count++;
+				}
+			}
+			return RE::BSContainer::ForEachResult::kContinue;
+		});
+	}
+	return count > 0;
 }
 
 void RefStop::Update(const RefStop& other)

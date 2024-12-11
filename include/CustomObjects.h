@@ -271,7 +271,7 @@ struct RefStopFeature {
     explicit operator bool() const;
 
     RefStopFeature();
-	RefStopFeature(const uint32_t i) : id(i) {}
+    explicit RefStopFeature(const uint32_t i) : id(i) {}
 
     RefStopFeature& operator=(const RefStopFeature& other);
 
@@ -297,6 +297,8 @@ struct RefStop {
 	//RE::ShaderReferenceEffect* shader_ref_eff;
 	//RE::ModelReferenceEffect* model_ref_eff;
 
+	//std::set<FormID> applied_art_objects;
+
     RefStop() = default;
     explicit RefStop(RefID ref_id_);
 	RefStop(const RefID ref_id_, const float stop_t, const uint32_t color, const FormID art_id, const FormID shader_id, const FormID sound_id)
@@ -316,6 +318,9 @@ struct RefStop {
 	void RemoveArtObject();
 	void RemoveShader();
 	void RemoveSound();
+	void RemoveAll(RE::NiAVObject* a_obj3d);
+
+    static bool HasArtObject(RE::TESObjectREFR* a_ref, const RE::BGSArtObject* a_art);
 
 	void Update(const RefStop& other);
 
