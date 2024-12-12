@@ -193,7 +193,7 @@ FormID GetFormEditorIDFromString(const std::string& formEditorId)
         ss << std::hex << formEditorId;
         ss >> form_id_;
         if (const auto temp_form = GetFormByID(form_id_, "")) return temp_form->GetFormID();
-        logger::error("Formid is null for editorid {}", formEditorId);
+        logger::warn("Formid is null for editorid {}", formEditorId);
         return 0;
     }
     if (formEditorId.empty()) return 0;
