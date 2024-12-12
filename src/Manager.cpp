@@ -6,6 +6,16 @@ void Manager::WoUpdateLoop(const std::vector<RefID>& refs)
 		if (const auto ref = RE::TESForm::LookupByID<RE::TESObjectREFR>(refid)) {
 			{
                 std::unique_lock lock(queueMutex_);
+				if (!_ref_stops_.contains(refid)) {
+					continue;
+				}
+				auto& val = _ref_stops_.at(refid);
+				if (const auto obj3d = ref->Get3D()) {
+					val.RemoveTint(obj3d);
+				}
+				val.RemoveArtObject();
+				val.RemoveShader();
+				val.RemoveSound();
 			    _ref_stops_.erase(refid);
 			}
 			Update(ref);
@@ -16,36 +26,18 @@ void Manager::WoUpdateLoop(const std::vector<RefID>& refs)
 void Manager::UpdateLoop()
 {
 	//std::unique_lock lock(queueMutex_);
-	std::vector<RefID> ref_stops_copy;
-    for (
-        auto lock = std::shared_lock(queueMutex_);
-        const auto& key : _ref_stops_ | std::views::keys) {
-        ref_stops_copy.push_back(key);
-    } 
-    if (!Settings::world_objects_evolve.load()) {
-        for (
-            //auto lock = std::shared_lock(queueMutex_);
-            const auto& key : ref_stops_copy) {
-            if (const auto ref = RE::TESForm::LookupByID<RE::TESObjectREFR>(key); ref) {
-                if (const auto obj3d = ref->Get3D()) {
-                    std::shared_lock lock(queueMutex_);
-					if (_ref_stops_.contains(key)) _ref_stops_.at(key).RemoveAll(obj3d);
-                }
-            }
-        }
-	    std::unique_lock lock(queueMutex_);
-        _ref_stops_.clear();
-    }
-    if (_ref_stops_.empty()) {
-        Stop();
-	    std::unique_lock lock(queueMutex_);
-        queue_delete_.clear();
-        return;
-    }
 	if (std::unique_lock lock(queueMutex_);
         !queue_delete_.empty()) {
 	    for (auto it = _ref_stops_.begin(); it != _ref_stops_.end();) {
             if (queue_delete_.contains(it->first)) {
+				if (const auto ref = RE::TESForm::LookupByID<RE::TESObjectREFR>(it->first)) {
+					if (const auto obj3d = ref->Get3D()) {
+						it->second.RemoveTint(obj3d);
+					}
+				}
+				it->second.RemoveArtObject();
+				it->second.RemoveShader();
+				it->second.RemoveSound();
 	            it = _ref_stops_.erase(it);
             }
             else ++it;
@@ -53,20 +45,42 @@ void Manager::UpdateLoop()
 		queue_delete_.clear();
     }
 
+    if (!Settings::world_objects_evolve.load()) {
+	    std::unique_lock lock(queueMutex_);
+        for (auto& [key,val] : _ref_stops_) {
+            if (const auto ref = RE::TESForm::LookupByID<RE::TESObjectREFR>(key)) {
+                if (const auto obj3d = ref->Get3D()) {
+					val.RemoveTint(obj3d);
+                }
+            }
+            val.RemoveArtObject();
+			val.RemoveShader();
+			val.RemoveSound();
+        }
+        _ref_stops_.clear();
+    }
+
+    if (_ref_stops_.empty()) {
+        Stop();
+	    std::unique_lock lock(queueMutex_);
+        queue_delete_.clear();
+        return;
+    }
+
     if (const auto ui = RE::UI::GetSingleton(); ui && ui->GameIsPaused()) return;
+
+	std::vector<RefID> ref_stops_copy;
+    for (
+        auto lock = std::shared_lock(queueMutex_);
+        const auto& key : _ref_stops_ | std::views::keys) {
+        ref_stops_copy.push_back(key);
+    } 
 
 	// new mechanic: WO can also be affected by time modulators
 	// Update _ref_stops_ with the new times
     for (const auto& key : ref_stops_copy) {
-        if (const auto ref = RE::TESForm::LookupByID<RE::TESObjectREFR>(key); ref) {
+        if (const auto ref = RE::TESForm::LookupByID<RE::TESObjectREFR>(key)) {
             Update(ref);
-        }
-    }
-
-    for (const auto& key : ref_stops_copy) {
-        if (const auto ref = RE::TESForm::LookupByID<RE::TESObjectREFR>(key); ref) {
-			std::shared_lock lock(queueMutex_);
-            if (_ref_stops_.contains(key)) _ref_stops_.at(key).ApplyAll(ref);
         }
     }
 
@@ -76,8 +90,19 @@ void Manager::UpdateLoop()
 		std::vector<RefID> ref_stops_copy2;
 		for (
             auto lock = std::shared_lock(queueMutex_);
-            const auto& [key,val] : _ref_stops_) {
-            if (val.IsDue(curr_time)) ref_stops_copy2.push_back(key);
+            const auto& key : ref_stops_copy) {
+			if (!_ref_stops_.contains(key)) continue;
+            if (auto& val = _ref_stops_.at(key); val.IsDue(curr_time)) {
+		        ref_stops_copy2.push_back(key);
+            }
+			else if (const auto ref = RE::TESForm::LookupByID<RE::TESObjectREFR>(key)) {
+				if (const auto obj3d = ref->Get3D()) {
+					val.ApplyTint(obj3d);
+				}
+				val.ApplyArtObject(ref);
+				val.ApplyShader(ref);
+				val.ApplySound();
+			}
 		}
         WoUpdateLoop(ref_stops_copy2);
     }
@@ -88,11 +113,9 @@ void Manager::QueueWOUpdate(const RefStop& a_refstop)
 {
     if (!Settings::world_objects_evolve.load()) return;
 	const auto refid = a_refstop.ref_id;
+    std::unique_lock lock(queueMutex_);
     if (_ref_stops_.contains(refid)) _ref_stops_.at(refid).Update(a_refstop);
-    else {
-        std::unique_lock lock(queueMutex_);
-        _ref_stops_[refid] = a_refstop;
-    }
+    else _ref_stops_[refid] = a_refstop;
     Start();
 }
 
@@ -639,7 +662,7 @@ void Manager::UpdateWO(RE::TESObjectREFR* ref)
             }
         }
 
-		src = sources[i];
+		//src = sources[i];
 		if (!src.data.contains(refid)) logger::error("UpdateWO: Refid {} not found in source data.", refid);
         auto& wo_inst = src.data.at(refid).front();
         if (wo_inst.xtra.is_fake) ApplyStageInWorld(ref, src.GetStage(wo_inst.no), src.GetBoundObject());

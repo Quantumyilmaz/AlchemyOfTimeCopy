@@ -157,6 +157,7 @@ std::map<RefID, std::vector<StageUpdate>> Source::UpdateAllStages(const std::vec
 						continue;
 					}
                     new_stage = &transformed_stages[temp_formid];
+					instance.xtra.is_transforming = false;
                 }
                 else if (instance.xtra.is_decayed || !IsStageNo(instance.no)) {
                     new_stage = &decayed_stage;
