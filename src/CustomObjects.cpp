@@ -372,9 +372,8 @@ bool AddOnSettings::CheckIntegrity()
 }
 
 void RefStop::ApplyTint(RE::NiAVObject* a_obj3d) {
-	if (!tint_color.id) {
-        return RemoveTint(a_obj3d);
-	}
+	if (!tint_color.id) return RemoveTint(a_obj3d);
+	if (tint_color.enabled.load()) return;
     RE::NiColorA color;
 	hexToRGBA(tint_color.id, color);
 	a_obj3d->TintScenegraph(color);
@@ -384,6 +383,7 @@ void RefStop::ApplyTint(RE::NiAVObject* a_obj3d) {
 void RefStop::ApplyArtObject(RE::TESObjectREFR* a_ref, const float duration)
 {
 	if (!art_object.id) return RemoveArtObject();
+	if (art_object.enabled.load()) return;
 	const auto a_art_obj = RE::TESForm::LookupByID<RE::BGSArtObject>(art_object.id);
 	if (!a_art_obj) {
 		logger::error("Art object not found.");
@@ -391,9 +391,13 @@ void RefStop::ApplyArtObject(RE::TESObjectREFR* a_ref, const float duration)
 	}
 	//if (applied_art_objects.contains(art_object.id)) return;
 	//if (HasArtObject(a_ref, a_art_obj)) return;
-	const auto a_model_ref_eff_ptr = a_ref->ApplyArtObject(a_art_obj, duration);
+	SKSE::GetTaskInterface()->AddTask([a_ref, a_art_obj, duration]() {
+		if (!a_ref || !a_art_obj) return;
+	    a_ref->ApplyArtObject(a_art_obj, duration);
+		logger::error("Art object applied.");
+		});
 	//model_ref_eff = a_model_ref_eff_ptr;
-	//applied_art_objects.insert(art_object.id);
+	applied_art_objects.insert(art_object.id);
 
 	art_object.enabled.store(true);
 }
@@ -401,12 +405,16 @@ void RefStop::ApplyArtObject(RE::TESObjectREFR* a_ref, const float duration)
 void RefStop::ApplyShader(RE::TESObjectREFR* a_ref, const float duration)
 {
 	if (!effect_shader.id) return RemoveShader();
+	if (effect_shader.enabled.load()) return;
 	const auto eff_shader = RE::TESForm::LookupByID<RE::TESEffectShader>(effect_shader.id);
 	if (!eff_shader) {
 		logger::error("Shader not found.");
 		return;
 	}
-	const auto a_shader_ref_eff_ptr = a_ref->ApplyEffectShader(eff_shader, duration);
+	SKSE::GetTaskInterface()->AddTask([a_ref, eff_shader, duration]() {
+		if (!a_ref || !eff_shader) return;
+	    a_ref->ApplyEffectShader(eff_shader, duration);
+		});
 	//shader_ref_eff = a_shader_ref_eff_ptr;
 
 	effect_shader.enabled.store(true);
@@ -447,37 +455,57 @@ void RefStop::RemoveTint(RE::NiAVObject* a_obj3d)
 
 void RefStop::RemoveArtObject()
 {
-	art_object.enabled.store(false);
 	//if (model_ref_eff) model_ref_eff->finished = true;
 
-	//if (applied_art_objects.empty()) return;
-	//if (const auto a_ref = RE::TESForm::LookupByID<RE::TESObjectREFR>(ref_id)) {
-	//    if (const auto processLists = RE::ProcessLists::GetSingleton()) {
-	//	    const auto handle = a_ref->CreateRefHandle();
-	//	    processLists->ForEachModelEffect([&](RE::ModelReferenceEffect* a_modelEffect) {
-	//		    if (a_modelEffect->target == handle && a_modelEffect->artObject) {
-	//				if (applied_art_objects.contains(a_modelEffect->artObject->GetFormID())) {
-	//			        a_modelEffect->lifetime = 3.f;
-	//				}
-	//		    }
-	//		    return RE::BSContainer::ForEachResult::kContinue;
-	//	    });
-	//    }
-	//}
-	//applied_art_objects.clear();
+	if (applied_art_objects.empty()) return;
+	if (const auto a_ref = RE::TESForm::LookupByID<RE::TESObjectREFR>(ref_id)) {
+	    if (const auto processLists = RE::ProcessLists::GetSingleton()) {
+		    const auto handle = a_ref->CreateRefHandle();
+		    processLists->ForEachModelEffect([&](RE::ModelReferenceEffect* a_modelEffect) {
+			    if (a_modelEffect->target == handle && a_modelEffect->artObject) {
+					if (applied_art_objects.contains(a_modelEffect->artObject->GetFormID())) {
+						if (a_modelEffect->lifetime<0.f) {
+					        a_modelEffect->lifetime = a_modelEffect->age+5.f;
+						    logger::error("Art object removed {} {}.",a_modelEffect->age,a_modelEffect->lifetime);
+						}
+					}
+			    }
+			    return RE::BSContainer::ForEachResult::kContinue;
+		    });
+	    }
+	}
+	applied_art_objects.clear();
 
+	art_object.enabled.store(false);
 }
 
 void RefStop::RemoveShader()
 {
-	effect_shader.enabled.store(false);
 	//if (shader_ref_eff) shader_ref_eff->finished = true;
-	/*if (const auto a_ref = RE::TESForm::LookupByID<RE::TESObjectREFR>(ref_id)) {
-		if (const auto processLists = RE::ProcessLists::GetSingleton()) {
-			processLists->StopAllMagicEffects(*a_ref);
-		}
+	//if (const auto a_ref = RE::TESForm::LookupByID<RE::TESObjectREFR>(ref_id)) {
+	//	if (const auto processLists = RE::ProcessLists::GetSingleton()) {
+	//		processLists->StopAllMagicEffects(*a_ref);
+	//	}
 
-	}*/
+	//}
+	if (applied_effect_shaders.empty()) return;
+	if (const auto a_ref = RE::TESForm::LookupByID<RE::TESObjectREFR>(ref_id)) {
+	    if (const auto processLists = RE::ProcessLists::GetSingleton()) {
+		    const auto handle = a_ref->CreateRefHandle();
+		    processLists->ForEachShaderEffect([&](RE::ShaderReferenceEffect* a_modelEffect) {
+			    if (a_modelEffect->target == handle && a_modelEffect->effectData) {
+					if (applied_effect_shaders.contains(a_modelEffect->effectData->GetFormID())) {
+						if (a_modelEffect->lifetime < 0.f) {
+							a_modelEffect->lifetime = a_modelEffect->age+5.f;
+						}
+					}
+			    }
+			    return RE::BSContainer::ForEachResult::kContinue;
+		    });
+	    }
+	}
+	applied_effect_shaders.clear();
+	effect_shader.enabled.store(false);
 }
 
 void RefStop::RemoveSound()

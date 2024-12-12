@@ -297,7 +297,8 @@ struct RefStop {
 	//RE::ShaderReferenceEffect* shader_ref_eff;
 	//RE::ModelReferenceEffect* model_ref_eff;
 
-	//std::set<FormID> applied_art_objects;
+	std::set<FormID> applied_art_objects;
+	std::set<FormID> applied_effect_shaders;
 
     RefStop() = default;
     explicit RefStop(RefID ref_id_);
@@ -308,8 +309,8 @@ struct RefStop {
 	[[nodiscard]] bool IsDue(float curr_time) const;
 
     void ApplyTint(RE::NiAVObject* a_obj3d);
-    void ApplyArtObject(RE::TESObjectREFR* a_ref, float duration=3.f);
-	void ApplyShader(RE::TESObjectREFR* a_ref, float duration=3.f);
+    void ApplyArtObject(RE::TESObjectREFR* a_ref, float duration=-1.f);
+	void ApplyShader(RE::TESObjectREFR* a_ref, float duration=-1.f);
 	void ApplySound(float volume=200.f);
     void ApplyAll(RE::TESObjectREFR* a_ref);
     [[nodiscard]] RE::BSSoundHandle& GetSoundHandle() const;
