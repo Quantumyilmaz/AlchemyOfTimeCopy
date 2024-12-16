@@ -394,7 +394,6 @@ void RefStop::ApplyArtObject(RE::TESObjectREFR* a_ref, const float duration)
 	SKSE::GetTaskInterface()->AddTask([a_ref, a_art_obj, duration]() {
 		if (!a_ref || !a_art_obj) return;
 	    a_ref->ApplyArtObject(a_art_obj, duration);
-		logger::error("Art object applied.");
 		});
 	//model_ref_eff = a_model_ref_eff_ptr;
 	applied_art_objects.insert(art_object.id);
@@ -466,7 +465,6 @@ void RefStop::RemoveArtObject()
 					if (applied_art_objects.contains(a_modelEffect->artObject->GetFormID())) {
 						if (a_modelEffect->lifetime<0.f) {
 					        a_modelEffect->lifetime = a_modelEffect->age+5.f;
-						    logger::error("Art object removed {} {}.",a_modelEffect->age,a_modelEffect->lifetime);
 						}
 					}
 			    }
