@@ -5,17 +5,8 @@ void OurEventSink::HandleWO(RE::TESObjectREFR* ref) const
     if (!ref) return;
     //if (ref->extraList.GetOwner() && !ref->extraList.GetOwner()->IsPlayer()) return;
     if (!Settings::IsItem(ref)) return;
-    if (ref->extraList.HasType(RE::ExtraDataType::kStartingPosition)) {
-        if (const auto starting_pos = ref->extraList.GetByType<RE::ExtraStartingPosition>(); starting_pos->location) {
-            /*logger::trace("has location.");
-            logger::trace("Location: {}", starting_pos->location->GetName());
-            logger::trace("Location: {}", starting_pos->location->GetFullName());*/
-            return;
-        }
-        /*logger::trace("Position: {}", starting_pos->startPosition.pos.x);
-        logger::trace("Position: {}", starting_pos->startPosition.pos.y);
-        logger::trace("Position: {}", starting_pos->startPosition.pos.z);*/
-    }
+
+    if (!Settings::placed_objects_evolve.load() && WorldObject::IsPlacedObject(ref)) return;
 
 	logger::trace("Handle WO: Calling Update.");
 	M->Update(ref);

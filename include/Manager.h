@@ -31,6 +31,8 @@ class Manager final : public Ticker, public SaveLoadData {
 
     void WoUpdateLoop(const std::vector<RefID>& refs);
 
+    static void PreDeleteRefStop(RefStop& a_ref_stop, RE::NiAVObject* a_obj);
+
     void UpdateLoop();
 
     void QueueWOUpdate(const RefStop& a_refstop);

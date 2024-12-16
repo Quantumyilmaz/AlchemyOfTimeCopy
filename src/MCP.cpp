@@ -28,7 +28,12 @@ void __stdcall UI::RenderSettings()
 						bool temp = Settings::world_objects_evolve.load();
                         IniSettingToggle(temp,setting_name,section_name,"Allows items out in the world to transform.");
 						Settings::world_objects_evolve.store(temp);
-                    }
+					}
+					else if (setting_name == "PlacedObjectsEvolve") {
+						bool temp = Settings::placed_objects_evolve.load();
+						IniSettingToggle(temp, setting_name, section_name, "Allows hand-placed objects (vanilla or by mods) to transform.");
+						Settings::placed_objects_evolve.store(temp);
+					}
                     else {
                         // we just want to display the settings in read only mode
                         ImGui::Text(setting_name.c_str());

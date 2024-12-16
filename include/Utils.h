@@ -338,6 +338,8 @@ namespace WorldObject {
 
 	RE::TESObjectREFR* TryToGetRefInCell(FormID baseid, Count count, float radius = 180);
 
+	bool IsPlacedObject(RE::TESObjectREFR* ref);
+
     template <typename T>
     void ForEachRefInCell(T func) {
         const auto player_cell = RE::PlayerCharacter::GetSingleton()->GetParentCell();

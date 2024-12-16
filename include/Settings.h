@@ -26,13 +26,14 @@ namespace Settings {
 														{"MISC",false},
 														{"NPC",false}
                                                         };
-    const std::map<const char*, bool> otherkeysvals = {{"WorldObjectsEvolve", false}, {"bReset", false}, {"DisableWarnings",false}};
+    const std::map<const char*, bool> otherkeysvals = {{"PlacedObjectsEvolve", false},{"WorldObjectsEvolve", false}, {"bReset", false}, {"DisableWarnings",false}};
     const std::map<const char*, std::map<const char*, bool>> InISections = 
                    {{"Modules", moduleskeyvals}, {"Other Settings", otherkeysvals}};
     inline int nMaxInstances = 200000;
     inline int nForgettingTime = 2160;  // in hours
     inline bool disable_warnings = false;
     inline std::atomic world_objects_evolve = false;
+	inline std::atomic placed_objects_evolve = false;
     inline float proximity_range = 10.f;
 
     inline float search_radius = -1.f;

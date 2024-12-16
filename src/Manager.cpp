@@ -10,12 +10,7 @@ void Manager::WoUpdateLoop(const std::vector<RefID>& refs)
 					continue;
 				}
 				auto& val = _ref_stops_.at(refid);
-				if (const auto obj3d = ref->Get3D()) {
-					val.RemoveTint(obj3d);
-				}
-				val.RemoveArtObject();
-				val.RemoveShader();
-				val.RemoveSound();
+				PreDeleteRefStop(val, ref->Get3D());
 			    _ref_stops_.erase(refid);
 			}
 			Update(ref);
@@ -23,21 +18,32 @@ void Manager::WoUpdateLoop(const std::vector<RefID>& refs)
     }
 }
 
+void Manager::PreDeleteRefStop(RefStop& a_ref_stop, RE::NiAVObject* a_obj)
+{
+    if (a_obj) a_ref_stop.RemoveTint(a_obj);
+	a_ref_stop.RemoveArtObject();
+	a_ref_stop.RemoveShader();
+	a_ref_stop.RemoveSound();
+}
+
 void Manager::UpdateLoop()
 {
 	//std::unique_lock lock(queueMutex_);
-	if (std::unique_lock lock(queueMutex_);
-        !queue_delete_.empty()) {
+    if (!Settings::world_objects_evolve.load()) {
+	    std::unique_lock lock(queueMutex_);
+        for (auto& [key,val] : _ref_stops_) {
+            const auto ref = RE::TESForm::LookupByID<RE::TESObjectREFR>(key);
+            PreDeleteRefStop(val, ref ? ref->Get3D() : nullptr);
+        }
+        _ref_stops_.clear();
+    }
+	else if (std::unique_lock lock(queueMutex_);
+        !queue_delete_.empty() || !Settings::placed_objects_evolve.load()) {
 	    for (auto it = _ref_stops_.begin(); it != _ref_stops_.end();) {
-            if (queue_delete_.contains(it->first)) {
-				if (const auto ref = RE::TESForm::LookupByID<RE::TESObjectREFR>(it->first)) {
-					if (const auto obj3d = ref->Get3D()) {
-						it->second.RemoveTint(obj3d);
-					}
-				}
-				it->second.RemoveArtObject();
-				it->second.RemoveShader();
-				it->second.RemoveSound();
+            if (const auto ref = RE::TESForm::LookupByID<RE::TESObjectREFR>(it->first); 
+                queue_delete_.contains(it->first) ||
+                ref && !Settings::placed_objects_evolve && WorldObject::IsPlacedObject(ref)) {
+                PreDeleteRefStop(it->second,ref ? ref->Get3D() : nullptr);
 	            it = _ref_stops_.erase(it);
             }
             else ++it;
@@ -45,20 +51,6 @@ void Manager::UpdateLoop()
 		queue_delete_.clear();
     }
 
-    if (!Settings::world_objects_evolve.load()) {
-	    std::unique_lock lock(queueMutex_);
-        for (auto& [key,val] : _ref_stops_) {
-            if (const auto ref = RE::TESForm::LookupByID<RE::TESObjectREFR>(key)) {
-                if (const auto obj3d = ref->Get3D()) {
-					val.RemoveTint(obj3d);
-                }
-            }
-            val.RemoveArtObject();
-			val.RemoveShader();
-			val.RemoveSound();
-        }
-        _ref_stops_.clear();
-    }
 
     if (_ref_stops_.empty()) {
         Stop();

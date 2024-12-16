@@ -627,6 +627,22 @@ RE::TESObjectREFR* WorldObject::TryToGetRefInCell(const FormID baseid, const Cou
     return nullptr;
 }
 
+bool WorldObject::IsPlacedObject(RE::TESObjectREFR* ref)
+{
+    if (ref->extraList.HasType(RE::ExtraDataType::kStartingPosition)) {
+        if (const auto starting_pos = ref->extraList.GetByType<RE::ExtraStartingPosition>(); starting_pos->location) {
+            /*logger::trace("has location.");
+            logger::trace("Location: {}", starting_pos->location->GetName());
+            logger::trace("Location: {}", starting_pos->location->GetFullName());*/
+            return true;
+        }
+        /*logger::trace("Position: {}", starting_pos->startPosition.pos.x);
+        logger::trace("Position: {}", starting_pos->startPosition.pos.y);
+        logger::trace("Position: {}", starting_pos->startPosition.pos.z);*/
+    }
+	return false;
+}
+
 RE::bhkRigidBody* WorldObject::GetRigidBody(const RE::TESObjectREFR* refr)
 {
     const auto object3D = refr->Get3D();
