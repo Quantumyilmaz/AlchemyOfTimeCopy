@@ -43,14 +43,7 @@ RE::UI_MESSAGE_RESULTS MenuHook<MenuType>::ProcessMessage_Hook(RE::UIMessage& a_
 void Hooks::Install(Manager* mngr){
     MenuHook<RE::ContainerMenu>::InstallHook(RE::VTABLE_ContainerMenu[0],mngr);
     MenuHook<RE::BarterMenu>::InstallHook(RE::VTABLE_BarterMenu[0],mngr);
-    //MenuHook<RE::CraftingMenu>::InstallHook(RE::VTABLE_CraftingMenu[0],mngr);
-    //MenuHook<RE::DialogueMenu>::InstallHook(RE::VTABLE_DialogueMenu[0],mngr);
     MenuHook<RE::FavoritesMenu>::InstallHook(RE::VTABLE_FavoritesMenu[0],mngr);
 	MenuHook<RE::InventoryMenu>::InstallHook(RE::VTABLE_InventoryMenu[0],mngr);
     MenuHook<RE::LockpickingMenu>::InstallHook(RE::VTABLE_LockpickingMenu[0],mngr);
-    //MenuHook<RE::MagicMenu>::InstallHook(RE::VTABLE_MagicMenu[0],mngr);
-    //MenuHook<RE::MapMenu>::InstallHook(RE::VTABLE_MapMenu[0],mngr);
-
-    /*auto& trampoline = SKSE::GetTrampoline();
-    trampoline.create(Hooks::trampoline_size);*/
 };

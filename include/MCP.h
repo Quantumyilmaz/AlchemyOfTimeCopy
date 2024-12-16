@@ -20,17 +20,17 @@ namespace UI {
         bool is_decayed;
     };
 
-    struct GameItem {
+    struct GameObject {
         std::string name;
         uint32_t formid;
 
-		bool operator<(const GameItem& other) const {
+		bool operator<(const GameObject& other) const {
 			return formid < other.formid;
 		}
     };
 
 	struct Stage {
-		GameItem item;
+		GameObject item;
         StageName name;
 		Duration duration;
 		bool is_fake;
@@ -42,8 +42,8 @@ namespace UI {
 		}
 
 		// constructor
-		Stage(GameItem item_, StageName name_, Duration duration_, bool is_fake_, bool crafting_allowed_, unsigned int no_)
-			: item(item_), name(name_), duration(duration_), is_fake(is_fake_), crafting_allowed(crafting_allowed_), no(no_) {}
+		Stage(GameObject item_, StageName name_, const Duration duration_, const bool is_fake_, const bool crafting_allowed_, const unsigned int no_)
+			: item(std::move(item_)), name(std::move(name_)), duration(duration_), is_fake(is_fake_), crafting_allowed(crafting_allowed_), no(no_) {}
 
 	private:
         unsigned int no = 0;
@@ -51,10 +51,11 @@ namespace UI {
 
     struct MCPSource {
 		std::set<Stage> stages;
-		std::set<GameItem> transformers;
-		std::map<FormID,GameItem> transformer_enditems;
+		std::set<GameObject> containers;
+		std::set<GameObject> transformers;
+		std::map<FormID,GameObject> transformer_enditems;
 		std::map<FormID,Duration> transform_durations;
-		std::set<GameItem> time_modulators;
+		std::set<GameObject> time_modulators;
 		std::map<FormID,float> time_modulator_multipliers;
         std::string type;
     };
@@ -72,7 +73,7 @@ namespace UI {
     inline std::string last_generated;
     inline std::string item_current = "##current";
     inline std::string sub_item_current = "##item";
-    inline std::string source_current = "##source"; 
+    inline std::string source_current = "##source";
     inline bool is_list_box_focused = false;
     inline ImGuiTextFilter* filter;
     inline ImGuiTextFilter* filter2;
@@ -86,8 +87,12 @@ namespace UI {
     void __stdcall RenderInspect();
     void __stdcall RenderUpdateQ();
     void __stdcall RenderStages();
+    void __stdcall RenderDFT();
     void __stdcall RenderLog();
     void Register(Manager* manager);
+
+    inline std::map<FormID,std::pair<std::string,int>> dynamic_forms;
+    inline int dft_form_limit = DynamicFormTracker::GetSingleton()->form_limit;
 
     void ExcludeList();
 	void IniSettingToggle(bool& setting, const std::string& setting_name, const std::string&section_name, const char* desc);
@@ -98,5 +103,8 @@ namespace UI {
     void UpdateLocationMap(const std::vector<Source>& sources);
 	void UpdateStages(const std::vector<Source>& sources);
     void RefreshButton();
+    void Refresh();
+
+    std::string GetName(FormID formid);
 
 };

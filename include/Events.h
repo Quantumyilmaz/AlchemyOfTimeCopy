@@ -30,6 +30,9 @@ class OurEventSink final : public RE::BSTEventSink<RE::TESEquipEvent>,
     bool furniture_entered = false;
     RE::NiPointer<RE::TESObjectREFR> furniture = nullptr;
 
+	/*const float min_last_crosshair_update_time = 0.0003f;
+	std::pair<RefID, float> last_crosshair_ref_update = { 0,0.f };*/
+
     void HandleWO(RE::TESObjectREFR* ref) const;
 
 public:
@@ -68,7 +71,7 @@ public:
     RE::BSEventNotifyControl ProcessEvent(const RE::TESWaitStopEvent*,
                                           RE::BSTEventSource<RE::TESWaitStopEvent>*) override;
 
-    // https:  // github.com/SeaSparrowOG/RainExtinguishesFires/blob/c1aee0045aeb987b2f70e495b301c3ae8bd7b3a3/src/loadEventManager.cpp#L15
+    // https://github.com/SeaSparrowOG/RainExtinguishesFires/blob/c1aee0045aeb987b2f70e495b301c3ae8bd7b3a3/src/loadEventManager.cpp#L15
     RE::BSEventNotifyControl ProcessEvent(const RE::BGSActorCellEvent* a_event, RE::BSTEventSource<RE::BGSActorCellEvent>*) override;
 
     RE::BSEventNotifyControl ProcessEvent(const RE::TESFormDeleteEvent* a_event,

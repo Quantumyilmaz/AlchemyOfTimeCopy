@@ -25,7 +25,9 @@ void __stdcall UI::RenderSettings()
                         IniSettingToggle(Settings::disable_warnings,setting_name,section_name,"Disables in-game warning pop-ups.");
                     }
                     else if (setting_name == "WorldObjectsEvolve") {
-                        IniSettingToggle(Settings::world_objects_evolve,setting_name,section_name,"Allows items out in the world to transform.");
+						bool temp = Settings::world_objects_evolve.load();
+                        IniSettingToggle(temp,setting_name,section_name,"Allows items out in the world to transform.");
+						Settings::world_objects_evolve.store(temp);
                     }
                     else {
                         // we just want to display the settings in read only mode
@@ -181,8 +183,26 @@ void __stdcall UI::RenderUpdateQ()
 	}
 
 	RefreshButton();
+	ImGui::Text("Update Queue: %s", M->IsTickerActive() ? "Active" : "Paused");
+	// need a combo box to select the ticker speed
+    ImGui::SetNextItemWidth(180.f);
+	const auto ticker_speed_str = Settings::Ticker::to_string(Settings::ticker_speed);
+	if (ImGui::BeginCombo("##combo_ticker_speed", ticker_speed_str.c_str())) {
+		for (int i = 0; i < Settings::Ticker::enum_size; ++i) {
+			const auto speed = static_cast<Settings::Ticker::Intervals>(i);
+			const auto speed_str = Settings::Ticker::to_string(speed);
+			if (ImGui::Selectable(speed_str.c_str(), Settings::ticker_speed == speed)) {
+				Settings::ticker_speed = speed;
+				M->UpdateInterval(std::chrono::milliseconds(Settings::Ticker::GetInterval(Settings::ticker_speed)));
+                SaveSettings();
+            }
+        }
+        ImGui::EndCombo();
+    }
+    ImGui::SameLine();
+    HelpMarker("Choosing faster options reduces the time between updates, making the evolution of items out in the world more responsive. It will take time when switching from slower settings.");
 
-	if (Settings::world_objects_evolve) {
+	if (Settings::world_objects_evolve.load()) {
 		ImGui::TextColored(ImVec4(0, 1, 0, 1), "World Objects Evolve: Enabled");
 	}
 	else {
@@ -193,12 +213,12 @@ void __stdcall UI::RenderUpdateQ()
 		ImGui::TableSetupColumn("Name");
 		ImGui::TableSetupColumn("Update Time");
 		ImGui::TableHeadersRow();
-		for (const auto& [formid, name_stop_time] : update_q) {
+		for (const auto& [fst, snd] : update_q | std::views::values) {
 			ImGui::TableNextRow();
 			ImGui::TableNextColumn();
-			ImGui::Text(name_stop_time.first.c_str());
+			ImGui::Text(fst.c_str());
 			ImGui::TableNextColumn();
-			ImGui::Text(std::format("{}", name_stop_time.second).c_str());
+			ImGui::Text(std::format("{}", snd).c_str());
 		}
 		ImGui::EndTable();
 	}
@@ -245,6 +265,15 @@ void __stdcall UI::RenderStages()
 		}
 	}
 
+    ImGui::SameLine();
+    if (ImGui::Button("Exclude##addtoexclude")) {
+		const auto& temp_selected_source = mcp_sources[selected_source_index];
+		const auto temp_form = RE::TESForm::LookupByID(temp_selected_source.stages.begin()->item.formid);
+        if (const auto temp_editorid = clib_util::editorID::get_editorID(temp_form); !temp_editorid.empty()) {
+			Settings::AddToExclude(temp_editorid, temp_selected_source.type, "MCP");
+        }
+    }
+
 	if (mcp_sources.empty() || selected_source_index >= mcp_sources.size()) {
 		ImGui::Text("No sources available");
 		return;
@@ -274,6 +303,19 @@ void __stdcall UI::RenderStages()
 			ImGui::TableNextColumn();
 			ImGui::Text(stage.is_fake ? "Yes" : "No");
 
+		}
+		ImGui::EndTable();
+	}
+
+    ImGui::Text("");
+    ImGui::Text("Containers");
+	if (ImGui::BeginTable("table_containers", 1, table_flags)) {
+		ImGui::TableSetupColumn("Container (FormID)");
+		ImGui::TableHeadersRow();
+		for (const auto& [name, formid] : src.containers) {
+			ImGui::TableNextRow();
+			ImGui::TableNextColumn();
+			ImGui::Text((name + std::format(" ({:x})", formid)).c_str());
 		}
 		ImGui::EndTable();
 	}
@@ -319,6 +361,30 @@ void __stdcall UI::RenderStages()
 		ImGui::EndTable();
 	}
 }
+void __stdcall UI::RenderDFT()
+{
+    RefreshButton();
+
+	ImGui::Text(std::format("Dynamic Forms ({}/{})", dynamic_forms.size(),dft_form_limit).c_str());
+	if (dynamic_forms.empty()) {
+		ImGui::Text("No dynamic forms found.");
+		return;
+	}
+	// dynamic forms table: FormID, Name, Status
+	if (ImGui::BeginTable("table_dynamic_forms", 3, table_flags)) {
+		for (const auto& [formid, form] : dynamic_forms) {
+			ImGui::TableNextRow();
+			ImGui::TableNextColumn();
+			ImGui::Text(std::format("{:08X}", formid).c_str());
+			ImGui::TableNextColumn();
+			ImGui::Text(form.first.c_str());
+			ImGui::TableNextColumn();
+			const auto color = form.second == 2 ? ImVec4(0, 1, 0, 1) : form.second == 1 ? ImVec4(1, 1, 0, 1) : ImVec4(1, 0, 0, 1);
+			ImGui::TextColored(color, form.second == 2 ? "Active" : form.second == 1 ? "Protected" : "Inactive");
+		}
+		ImGui::EndTable();
+	}
+}
 void __stdcall UI::RenderLog()
 {
 #ifndef NDEBUG
@@ -359,6 +425,7 @@ void UI::Register(Manager* manager)
     SKSEMenuFramework::AddSectionItem("Inspect", RenderInspect);
 	SKSEMenuFramework::AddSectionItem("Update Queue", RenderUpdateQ);
 	SKSEMenuFramework::AddSectionItem("Stages", RenderStages);
+	SKSEMenuFramework::AddSectionItem("Dynamic Forms", RenderDFT);
     SKSEMenuFramework::AddSectionItem("Log", RenderLog);
     M = manager;
 }
@@ -513,72 +580,95 @@ void UI::UpdateStages(const std::vector<Source>& sources)
             if (const auto* stage = source.GetStageSafe(max_stage_no)) {
 				const auto* temp_form = RE::TESForm::LookupByID(stage->formid);
 				if (!temp_form) continue;
-                const GameItem item = {temp_form->GetName(),stage->formid};
+                const GameObject item = {temp_form->GetName(),stage->formid};
 				temp_stages.insert(Stage(item, stage->name, stage->duration, source.IsFakeStage(max_stage_no), stage->crafting_allowed,max_stage_no));
 			}
 			max_stage_no++;
 		}
 		const auto& stage = source.GetDecayedStage();
         if (const auto* temp_form = RE::TESForm::LookupByID(stage.formid)) {
-			const GameItem item = { temp_form->GetName(),stage.formid };
+			const GameObject item = { .name= temp_form->GetName(),.formid= stage.formid };
 			temp_stages.insert(Stage(item, "Final", 0.f, source.IsFakeStage(max_stage_no), stage.crafting_allowed, max_stage_no));
 		}
+        std::set<GameObject> containers_;
+		for (const auto& container : source.settings.containers) {
+			const auto temp_formid = container;
+			const auto temp_name = GetName(temp_formid);
+			containers_.insert(GameObject{ temp_name,temp_formid });
+		}
 
-        std::set<GameItem> transformers_;
-		std::map<FormID,GameItem> transformer_enditems_;
+        std::set<GameObject> transformers_;
+		std::map<FormID,GameObject> transformer_enditems_;
 		std::map<FormID,Duration> transform_durations_;
-		for (const auto& [fst, snd] : source.defaultsettings->transformers) {
+		for (const auto& [fst, snd] : source.settings.transformers) {
 			auto temp_formid = fst;
-            const auto temp_form = RE::TESForm::LookupByID(temp_formid);
-            const auto temp_name = temp_form ? temp_form->GetName() : std::format("{:x}", temp_formid);
-			transformers_.insert(GameItem{ temp_name,temp_formid });
+			const auto temp_name = GetName(temp_formid);
+			transformers_.insert(GameObject{ temp_name,temp_formid });
 			const auto temp_formid2 = std::get<0>(snd);
-			const auto temp_form2 = RE::TESForm::LookupByID(temp_formid2);
-			const auto temp_name2 = temp_form2 ? temp_form2->GetName() : std::format("{:x}", temp_formid2);
-			transformer_enditems_[temp_formid] = GameItem{ temp_name2,temp_formid2 };
+			auto temp_name2 = GetName(temp_formid2);
+			transformer_enditems_[temp_formid] = GameObject{ temp_name2,temp_formid2 };
 			transform_durations_[temp_formid] = std::get<1>(snd);
 		}
-		std::set<GameItem> time_modulators_;
+		std::set<GameObject> time_modulators_;
 		std::map<FormID,float> time_modulator_multipliers_;
-		for (const auto& [fst, snd] : source.defaultsettings->delayers) {
+		for (const auto& [fst, snd] : source.settings.delayers) {
 			auto temp_formid = fst;
 			const auto temp_form = RE::TESForm::LookupByID(temp_formid);
 			const auto temp_name = temp_form ? temp_form->GetName() : std::format("{:x}", temp_formid);
-			time_modulators_.insert(GameItem{ temp_name,temp_formid });
+			time_modulators_.insert(GameObject{ temp_name,temp_formid });
 			time_modulator_multipliers_[temp_formid] = snd;
 		}
 
 		const auto qform_type = Settings::GetQFormType(source.formid);
-		mcp_sources.push_back(MCPSource{ temp_stages,transformers_,transformer_enditems_,transform_durations_,time_modulators_,time_modulator_multipliers_,qform_type});
+		mcp_sources.push_back(MCPSource{ temp_stages,containers_,transformers_,transformer_enditems_,transform_durations_,time_modulators_,time_modulator_multipliers_,qform_type});
 	}
 }
 
 void UI::RefreshButton()
 {
-    const auto& sources = M->GetSources();
-
     FontAwesome::PushSolid();
 
     if (ImGui::Button((FontAwesome::UnicodeToUtf8(0xf021) + " Refresh").c_str()) || last_generated.empty()) {
-
-        last_generated = std::format("{} (in-game hours)", RE::Calendar::GetSingleton()->GetHoursPassed());
-
-        UpdateLocationMap(sources);
-		UpdateStages(sources);
-
-		update_q.clear();
-        for (const auto& [refid, stop_time] : M->GetUpdateQueue()) {
-			if (const auto ref = RE::TESForm::LookupByID<RE::TESObjectREFR>(refid)) {
-				std::string temp_name = std::format("{} ({:x})", ref->GetName(), refid);
-				update_q[refid] = std::make_pair(temp_name, stop_time);
-			}
-            else {
-				update_q[refid] = std::make_pair(std::format("{:x}", refid), stop_time);
-		    }
-        }
+		Refresh();
     }
     FontAwesome::Pop();
 
     ImGui::SameLine();
     ImGui::Text(("Last Generated: " + last_generated).c_str());
+}
+
+void UI::Refresh()
+{
+    last_generated = std::format("{} (in-game hours)", RE::Calendar::GetSingleton()->GetHoursPassed());
+	dynamic_forms.clear();
+    for (const auto DFT = DynamicFormTracker::GetSingleton(); const auto& df : DFT->GetDynamicForms()) {
+		if (const auto form = RE::TESForm::LookupByID(df); form) {
+			auto status = DFT->IsActive(df) ? 2 : DFT->IsProtected(df) ? 1 : 0;
+			dynamic_forms[df] = { form->GetName(), status };
+		}
+    }
+
+    const auto sources = M->GetSources();
+    UpdateLocationMap(sources);
+	UpdateStages(sources);
+
+	update_q.clear();
+    for (const auto [refid, stop_time] : M->GetUpdateQueue()) {
+		if (const auto ref = RE::TESForm::LookupByID<RE::TESObjectREFR>(refid)) {
+			std::string temp_name = std::format("{} ({:x})", ref->GetName(), refid);
+			update_q[refid] = std::make_pair(temp_name, stop_time);
+		}
+        else {
+			update_q[refid] = std::make_pair(std::format("{:x}", refid), stop_time);
+		}
+    }
+}
+
+std::string UI::GetName(FormID formid)
+{
+    const auto temp_form = RE::TESForm::LookupByID(formid);
+    auto temp_name = temp_form ? temp_form->GetName() : std::format("{:x}", formid);
+	if (temp_name.empty()) temp_name = clib_util::editorID::get_editorID(temp_form);
+	if (temp_name.empty()) temp_name = "???";
+	return temp_name;
 }

@@ -1,16 +1,22 @@
 #include "Data.h"
 
-void Source::Init() {
+void Source::Init(const DefaultSettings* defaultsettings) {
+
+	if (!defaultsettings) {
+		logger::error("Default settings is null.");
+		InitFailed();
+		return;
+	}
+
     const RE::TESForm* form = GetFormByID(formid, editorid);
     if (const auto bound_ = GetBoundObject(); !form || !bound_) {
         logger::error("Form not found.");
         InitFailed();
         return;
-    } 
-    else {
-        formid = form->GetFormID();
-        editorid = clib_util::editorID::get_editorID(form);
     }
+
+    formid = form->GetFormID();
+    editorid = clib_util::editorID::get_editorID(form);
         
     if (!formid || editorid.empty()) {
 		logger::error("Editorid is empty.");
@@ -29,11 +35,17 @@ void Source::Init() {
         logger::error("Formtype is not one of the predefined types.");
         InitFailed();
         return;
-    } else
-        logger::trace("Source initializing with QFormType: {}", qFormType);
-        
-    if (!defaultsettings) defaultsettings = &Settings::defaultsettings[qFormType];
-    if (!defaultsettings->CheckIntegrity()) {
+    }
+    logger::trace("Source initializing with QFormType: {}", qFormType);
+
+	// get settings
+	settings = *defaultsettings;
+    // put addons
+	if (auto* addon = Settings::GetAddOnSettings(form); addon && addon->IsHealthy()) {
+		settings.Add(*addon);
+	}
+
+    if (!settings.CheckIntegrity()) {
         logger::critical("Default settings integrity check failed.");
 		InitFailed();
 		return;
@@ -61,6 +73,7 @@ void Source::Init() {
 	else if (qFormType == "BOOK") GatherStages<RE::TESObjectBOOK>();
 	else if (qFormType == "SLGM") GatherStages<RE::TESSoulGem>();
 	else if (qFormType == "MISC") GatherStages<RE::TESObjectMISC>();
+	else if (qFormType == "NPC") GatherStages<RE::TESNPC>();
 	else {
 		logger::error("QFormType is not one of the predefined types.");
 		InitFailed();
@@ -69,14 +82,9 @@ void Source::Init() {
 
     // decayed stage
     decayed_stage = GetFinalStage();
-    if (!decayed_stage.CheckIntegrity()) {
-		logger::critical("Decayed stage integrity check failed.");
-		InitFailed();
-		return;
-	}
 
     // transformed stages
-    for (const auto& key : defaultsettings->transformers | std::views::keys) {
+    for (const auto& key : settings.transformers | std::views::keys) {
         const auto temp_stage = GetTransformedStage(key);
         if (!temp_stage.CheckIntegrity()) {
             logger::critical("Transformed stage integrity check failed.");
@@ -85,7 +93,6 @@ void Source::Init() {
         }
         transformed_stages[key] = temp_stage;
     }
-
 
     if (!CheckIntegrity()) {
         logger::critical("CheckIntegrity failed");
@@ -97,6 +104,24 @@ void Source::Init() {
 std::string_view Source::GetName() const {
     if (const auto form = GetFormByID(formid, editorid)) return form->GetName();
     return "";
+}
+
+void Source::UpdateAddons()
+{
+	const auto* form = GetFormByID(formid, editorid);
+	if (!form) {
+		logger::error("UpdateAddons: Form not found.");
+		return;
+	}
+	if (auto* addon = Settings::GetAddOnSettings(form); addon && addon->IsHealthy()) {
+		settings.Add(*addon);
+	}
+
+    if (!settings.CheckIntegrity()) {
+        logger::critical("Default settings integrity check failed.");
+		InitFailed();
+		return;
+	}
 }
 
 std::map<RefID, std::vector<StageUpdate>> Source::UpdateAllStages(const std::vector<RefID>& filter, const float time) {
@@ -111,6 +136,8 @@ std::map<RefID, std::vector<StageUpdate>> Source::UpdateAllStages(const std::vec
 		logger::warn("No data found for source {}", editorid);
 		return updated_instances;
 	}
+
+
     for (auto& reffid : filter) {
         logger::trace("Refid in filter: {}", reffid);
         if (!data.contains(reffid)) {
@@ -123,12 +150,14 @@ std::map<RefID, std::vector<StageUpdate>> Source::UpdateAllStages(const std::vec
                 Stage* new_stage = nullptr;
                 if (instance.xtra.is_transforming) {
                     instance.xtra.is_decayed = true;
+                    instance.xtra.is_fake = false;
                     const auto temp_formid = instance.GetDelayerFormID();
                     if (!transformed_stages.contains(temp_formid)) {
 						logger::error("Transformed stage not found.");
 						continue;
 					}
                     new_stage = &transformed_stages[temp_formid];
+					instance.xtra.is_transforming = false;
                 }
                 else if (instance.xtra.is_decayed || !IsStageNo(instance.no)) {
                     new_stage = &decayed_stage;
@@ -145,7 +174,6 @@ std::map<RefID, std::vector<StageUpdate>> Source::UpdateAllStages(const std::vec
             }
         }
     }
-    //CleanUpData();
     return updated_instances;
 }
 
@@ -156,14 +184,11 @@ bool Source::IsStage(const FormID some_formid) {
 }
 
 inline bool Source::IsStageNo(const StageNo no) const {
-    if (stages.contains(no)) return true;
-    if (fake_stages.contains(no)) return true;
-    return false;
+    return stages.contains(no) || fake_stages.contains(no);
 }
 
 inline bool Source::IsFakeStage(const StageNo no) const {
-    const auto it = fake_stages.find(no);
-    return it != fake_stages.end();
+	return fake_stages.contains(no);
 }
 
 StageNo Source::GetStageNo(const FormID formid_) {
@@ -264,7 +289,7 @@ StageInstance* Source::InsertNewInstance(const StageInstance& stage_instance, co
 	return &data[loc].back();
 }
 
-StageInstance* Source::InitInsertInstanceWO(StageNo n, Count c, RefID l, Duration t_0)
+StageInstance* Source::InitInsertInstanceWO(StageNo n, const Count c, const RefID l, const Duration t_0)
 {
     if (init_failed) {
         logger::critical("InitInsertInstance: Initialisation failed.");
@@ -283,7 +308,7 @@ StageInstance* Source::InitInsertInstanceWO(StageNo n, Count c, RefID l, Duratio
     return InsertNewInstance(new_instance,l);
 }
 
-bool Source::InitInsertInstanceInventory(StageNo n, Count c, RE::TESObjectREFR* inventory_owner, Duration t_0) {
+bool Source::InitInsertInstanceInventory(const StageNo n, const Count c, RE::TESObjectREFR* inventory_owner, const Duration t_0) {
     if (!inventory_owner) {
         logger::error("Inventory owner is null.");
         return false;
@@ -300,8 +325,7 @@ bool Source::InitInsertInstanceInventory(StageNo n, Count c, RE::TESObjectREFR* 
 		return false;
 	}
         
-    SetDelayOfInstance(data[inventory_owner_refid].back(), t_0,
-                        inventory_owner);
+    SetDelayOfInstance(data[inventory_owner_refid].back(), t_0, inventory_owner);
     return true;
 }
 
@@ -445,15 +469,16 @@ inline bool Source::IsTimeModulator(const FormID _form_id) const {
 
 bool Source::IsDecayedItem(const FormID _form_id) const {
     // if it is one of the transformations counts as decayed
-    for (const auto& trns_tpl : defaultsettings->transformers | std::views::values) {
-        if (const auto temp_formid = std::get<0>(trns_tpl); temp_formid == _form_id) return true; 
-    }
-    return decayed_stage.formid == _form_id; 
+	if (decayed_stage.formid == _form_id) return true;
+	return std::ranges::any_of(settings.transformers | std::views::values,
+                               [&](const auto& trns_tpl) {
+                                   return std::get<0>(trns_tpl) == _form_id;
+                               });
 }
 
 inline FormID Source::GetModulatorInInventory(RE::TESObjectREFR* inventory_owner) const {
     const auto inventory = inventory_owner->GetInventory();
-    for (const auto& dlyr_fid : defaultsettings->delayers_order) {
+    for (const auto& dlyr_fid : settings.delayers_order) {
         if (const auto entry = inventory.find(RE::TESForm::LookupByID<RE::TESBoundObject>(dlyr_fid));
             entry != inventory.end() && entry->second.first > 0) {
             return dlyr_fid;
@@ -462,15 +487,28 @@ inline FormID Source::GetModulatorInInventory(RE::TESObjectREFR* inventory_owner
     return 0;
 }
 
+inline FormID Source::GetModulatorInWorld(const RE::TESObjectREFR* wo) const
+{
+	// idea: scan proximity for the modulators
+	const auto& candidates = settings.delayers_order;
+    return SearchNearbyModulators(wo,candidates);
+}
+
 inline FormID Source::GetTransformerInInventory(RE::TESObjectREFR* inventory_owner) const {
     const auto inventory = inventory_owner->GetInventory();
-	for (const auto& trns_fid : defaultsettings->transformers_order) {
+	for (const auto& trns_fid : settings.transformers_order) {
 		if (const auto entry = inventory.find(RE::TESForm::LookupByID<RE::TESBoundObject>(trns_fid));
 			entry != inventory.end() && entry->second.first > 0) {
 			return trns_fid;
 		}
 	}
 	return 0;
+}
+
+inline FormID Source::GetTransformerInWorld(const RE::TESObjectREFR* wo) const
+{
+	const auto& candidates = settings.transformers_order;
+    return SearchNearbyModulators(wo,candidates);
 }
 
 void Source::UpdateTimeModulationInInventory(RE::TESObjectREFR* inventory_owner, const float _time)
@@ -505,6 +543,11 @@ void Source::UpdateTimeModulationInInventory(RE::TESObjectREFR* inventory_owner,
     SetDelayOfInstances(_time, inventory_owner);
 }
 
+void Source::UpdateTimeModulationInWorld(RE::TESObjectREFR* wo, StageInstance& wo_inst, const float _time) const
+{
+    SetDelayOfInstance(wo_inst, _time, wo, false);
+}
+
 float Source::GetNextUpdateTime(StageInstance* st_inst) {
     if (!st_inst) {
         logger::error("Stage instance is null.");
@@ -523,14 +566,14 @@ float Source::GetNextUpdateTime(StageInstance* st_inst) {
 
     const auto delay_slope = st_inst->GetDelaySlope();
     if (std::abs(delay_slope) < EPSILON) {
-		logger::warn("Delay slope is 0.");
+		//logger::warn("Delay slope is 0.");
 		return 0;
     }
 
     if (st_inst->xtra.is_transforming) {
         const auto transformer_form_id = st_inst->GetDelayerFormID();
-        if (!defaultsettings->transformers.contains(transformer_form_id)) return 0.0f;
-        const auto trnsfrm_duration = std::get<1>(defaultsettings->transformers.at(transformer_form_id));
+        if (!settings.transformers.contains(transformer_form_id)) return 0.0f;
+        const auto trnsfrm_duration = std::get<1>(settings.transformers.at(transformer_form_id));
 		return st_inst->GetTransformHittingTime(trnsfrm_duration);
     }
 
@@ -675,12 +718,12 @@ bool Source::UpdateStageInstance(StageInstance& st_inst, const float curr_time) 
     if (st_inst.xtra.is_decayed) return false;  // decayed
     if (st_inst.xtra.is_transforming) {
         logger::trace("Transforming stage found.");
-        if (const auto transformer_form_id = st_inst.GetDelayerFormID(); !defaultsettings->transformers.contains(transformer_form_id)) {
+        if (const auto transformer_form_id = st_inst.GetDelayerFormID(); !settings.transformers.contains(transformer_form_id)) {
 			logger::error("Transformer Formid {} not found in default settings.", transformer_form_id);
             st_inst.RemoveTransform(curr_time);
 		}
         else {
-            const auto& transform_properties = defaultsettings->transformers[transformer_form_id];
+            const auto& transform_properties = settings.transformers[transformer_form_id];
             const auto trnsfrm_duration = std::get<1>(transform_properties);
             if (const auto trnsfrm_elapsed = st_inst.GetTransformElapsed(curr_time); trnsfrm_elapsed >= trnsfrm_duration) {
                 logger::trace("Transform duration {} h exceeded.", trnsfrm_duration);
@@ -776,14 +819,18 @@ size_t Source::GetNStages() const {
 
 Stage Source::GetFinalStage() const {
     Stage dcyd_st;
-    dcyd_st.formid = defaultsettings->decayed_id;
+    dcyd_st.formid = settings.decayed_id;
     dcyd_st.duration = 0.1f; // just to avoid error in checkintegrity
     return dcyd_st;
 }
 
 Stage Source::GetTransformedStage(const FormID key_formid) const {
     Stage trnsf_st;
-    const auto& trnsf_props = defaultsettings->transformers[key_formid];
+	if (!settings.transformers.contains(key_formid)) {
+		logger::error("Transformer Formid {} not found in settings.", key_formid);
+		return trnsf_st;
+    }
+    const auto& trnsf_props = settings.transformers.at(key_formid);
     trnsf_st.formid = std::get<0>(trnsf_props);
     trnsf_st.duration = 0.1f; // just to avoid error in checkintegrity
     return trnsf_st;
@@ -791,73 +838,57 @@ Stage Source::GetTransformedStage(const FormID key_formid) const {
 
 void Source::SetDelayOfInstances(const float some_time, RE::TESObjectREFR* inventory_owner)
 {
-    if (!inventory_owner) {
-		logger::error("Inventory owner is null.");
-		return;
-	}
     const RefID loc = inventory_owner->GetFormID();
     if (!data.contains(loc)) {
         logger::error("Location {} does not exist.", loc);
         return;
     }
-
-    logger::trace("Setting delay of instances in inventory for time {}", some_time);
-
-    // first check for transformer
-    if (const FormID transformer_best = GetTransformerInInventory(inventory_owner)) {
-        logger::trace("Transformer found: {}", transformer_best);
-        const auto& allowed_stages = std::get<2>(defaultsettings->transformers[transformer_best]);
-        for (auto& instance : data.at(loc)) {
-			if (instance.count <= 0) continue;
-            if (Vector::HasElement<StageNo>(allowed_stages, instance.no)){
-                logger::trace("Setting transform to {} for instance with no {} bcs of form with id {}", transformer_best, instance.no, transformer_best);
-				instance.SetTransform(some_time, transformer_best);
-                logger::trace("Transform set to {} for instance with no {}", instance.GetDelayerFormID(), instance.no);
-            } else {
-                logger::trace("Removing transform for instance with no {} bcs of form with id {}", instance.no, transformer_best);
-                instance.RemoveTransform(some_time);
-            }
-		}
-    } else {
-        logger::trace("Transformer not found.");
-        for (auto& instance : data.at(loc)) {
-			if (instance.count <= 0) continue;
-            logger::trace("Removing transform for instance with no {} bcs of no transformer", instance.no);
-            instance.RemoveTransform(some_time);
-		}
+    if (ShouldFreezeEvolution(inventory_owner->GetBaseObject()->GetFormID())) {
+		for (auto& instance : data.at(loc)) {
+	        if (instance.count <= 0) continue;
+			instance.RemoveTimeMod(some_time);
+			instance.SetDelay(some_time, 0, 0); // freeze
+        }
+        return;
     }
 
-    const FormID delayer_best = GetModulatorInInventory(inventory_owner); // basically the first on the list
-    const float delay_ = delayer_best == 0 ? 1 : defaultsettings->delayers[delayer_best];
-    for (auto& instance : data.at(loc)) {
-        if (instance.count <= 0) continue;
-        logger::trace("Setting delay to {} for instance with no {} bcs of form with id {}", delay_, instance.no, delayer_best);
-        instance.SetDelay(some_time, delay_, delayer_best);
-    }
-}
-
-void Source::SetDelayOfInstance(StageInstance& instance, const float curr_time, RE::TESObjectREFR* inventory_owner) const {
-    if (instance.count <= 0) return;
-
-    // first check for transformer
-    if (const auto transformer_best = GetTransformerInInventory(inventory_owner)) {
-        if (const auto& allowed_stages = std::get<2>(defaultsettings->transformers[transformer_best]); Vector::HasElement<StageNo>(allowed_stages, instance.no)) {
-            logger::trace("Setting transform to {} for instance with no {} bcs of form with id {}", transformer_best, instance.no, transformer_best);
-            instance.SetTransform(curr_time, transformer_best);
-            logger::trace("Transform set to {} for instance with no {}", instance.GetDelayerFormID(), instance.no);
-        } else {
-            logger::trace("Removing transform for instance with no {} bcs of form with id {}", instance.no, transformer_best);
-			instance.RemoveTransform(curr_time);
-		}
-    }
-    else {
-        logger::trace("Transformer not found. Removing.");
-		instance.RemoveTransform(curr_time);
+    const auto transformer_best = GetTransformerInInventory(inventory_owner);
+    const auto delayer_best = GetModulatorInInventory(inventory_owner);
+    std::vector<StageNo> allowed_stages;
+	if (transformer_best && settings.transformers.contains(transformer_best)) {
+        allowed_stages = std::get<2>(settings.transformers[transformer_best]);
 	}
 
-    const auto delayer_best = GetModulatorInInventory(inventory_owner);
-    const float delay_ = delayer_best == 0 ? 1 : defaultsettings->delayers[delayer_best];
-    instance.SetDelay(curr_time, delay_, delayer_best);
+    for (auto& instance : data.at(loc)) {
+		if (instance.count <= 0) continue;
+		SetDelayOfInstance(instance, some_time, transformer_best, delayer_best, allowed_stages);
+	}
+}
+
+void Source::SetDelayOfInstance(StageInstance& instance, const float curr_time, RE::TESObjectREFR* a_object, const bool inventory_owner) const {
+    if (instance.count <= 0) return;
+    if (ShouldFreezeEvolution(a_object->GetBaseObject()->GetFormID())) {
+		instance.RemoveTimeMod(curr_time);
+		instance.SetDelay(curr_time, 0, 0); // freeze
+        return;
+    }
+	const auto transformer_best = inventory_owner ? GetTransformerInInventory(a_object) : GetTransformerInWorld(a_object);
+	const auto delayer_best = inventory_owner ? GetModulatorInInventory(a_object) : GetModulatorInWorld(a_object);
+    std::vector<StageNo> allowed_stages;
+	if (transformer_best && settings.transformers.contains(transformer_best)) {
+        allowed_stages = std::get<2>(settings.transformers.at(transformer_best));
+	}
+	SetDelayOfInstance(instance, curr_time, transformer_best, delayer_best, allowed_stages);
+}
+
+void Source::SetDelayOfInstance(StageInstance& instance, const float a_time, const FormID a_transformer, const FormID a_delayer, const std::vector<
+                                StageNo>& allowed_stages) const
+{
+	if (!a_transformer || !Vector::HasElement<StageNo>(allowed_stages, instance.no)) instance.RemoveTransform(a_time);
+	else return instance.SetTransform(a_time, a_transformer);
+
+	const float delay_ = !a_delayer ? 1 : settings.delayers.contains(a_delayer) ? settings.delayers.at(a_delayer) : 1;
+    instance.SetDelay(a_time, delay_, a_delayer);
 }
 
 bool Source::CheckIntegrity() {
@@ -876,7 +907,7 @@ bool Source::CheckIntegrity() {
 		return false;
 	}
 
-	if (!defaultsettings->CheckIntegrity()) {
+	if (!settings.CheckIntegrity()) {
         logger::error("Default settings integrity check failed.");
         return false;
     }
@@ -922,6 +953,19 @@ bool Source::CheckIntegrity() {
             return false;
         }
     }
+
+    for (auto stage : stages | std::views::values) {
+        if (!stage.CheckIntegrity()) {
+			logger::error("Stage integrity check failed for stage no {} and source {} {}", stage.no,formid,editorid);
+			return false;
+        }
+    }
+
+    if (!decayed_stage.CheckIntegrity()) {
+		logger::critical("Decayed stage integrity check failed.");
+		InitFailed();
+		return false;
+	}
 
     return true;
 }
@@ -973,12 +1017,12 @@ void Source::RegisterStage(const FormID stage_formid, const StageNo stage_no)
         return;
     }
 
-    const auto duration = defaultsettings->durations[stage_no];
-    const StageName& name = defaultsettings->stage_names[stage_no];
+    const auto duration = settings.durations[stage_no];
+    const StageName& name = settings.stage_names[stage_no];
 
     // create stage
-    Stage stage(stage_formid, duration, stage_no, name, defaultsettings->crafting_allowed[stage_no],
-                defaultsettings->effects[stage_no]);
+    Stage stage(stage_formid, duration, stage_no, name, settings.crafting_allowed[stage_no],
+                settings.effects[stage_no]);
     if (!stages.insert({stage_no, stage}).second) {
         logger::error("Could not insert stage");
         return;
@@ -1050,3 +1094,69 @@ StageNo Source::GetLastStageNo() {
     // return maximum of the set
     return *stage_numbers.rbegin();
 }
+
+FormID Source::SearchNearbyModulators(const RE::TESObjectREFR* a_obj, const std::vector<FormID>& candidates) {
+    const auto cell = a_obj->GetParentCell();
+	if (!cell) {
+		logger::error("WO and Player cell are null.");
+		return 0;
+	}
+	FormID result = 0;
+	const auto candidates_set = std::set(candidates.begin(), candidates.end());
+    if (cell->IsInteriorCell()) {
+        SearchModulatorInCell(result, a_obj, cell, candidates_set, Settings::search_radius);
+		return result;
+    }
+    SearchModulatorInCell(result, a_obj, cell, candidates_set, Settings::search_radius);
+	if (result) return result;
+
+	// now search in the adjacent cells
+	for (const auto& worldCell : cell->GetRuntimeData().worldSpace->cellMap) {
+		if (!worldCell.second) continue;
+		if (worldCell.second->IsInteriorCell()) continue;
+		if (!AreAdjacentCells(cell,worldCell.second)) continue;
+		SearchModulatorInCell(result, a_obj, worldCell.second, candidates_set, Settings::search_radius);
+		if (result) return result;
+	}
+
+    // now search in skycell
+	if (const auto worldspace = a_obj->GetWorldspace()) {
+		if (const auto skycell = worldspace->GetSkyCell()) {
+			SearchModulatorInCell(result, a_obj, skycell, candidates_set, Settings::search_radius);
+		}
+	}
+
+	return result;
+}
+
+void Source::SearchModulatorInCell(FormID& result, const RE::TESObjectREFR* a_origin,
+                                   const RE::TESObjectCELL* a_cell, const std::set<FormID>& modulators, const float range) {
+    if (range>0) {
+        a_cell->ForEachReferenceInRange(WorldObject::GetPosition(a_origin), range,
+                                        [&result, &modulators](const RE::TESObjectREFR* ref)-> RE::BSContainer::ForEachResult {
+                                            if (!ref || ref->IsDisabled() || ref->IsDeleted() || ref->IsMarkedForDeletion()) return RE::BSContainer::ForEachResult::kContinue;
+                                            if (const auto form_id = ref->GetObjectReference()->GetFormID(); modulators.contains(form_id)) {
+                                                result = form_id;
+                                                return RE::BSContainer::ForEachResult::kStop;
+                                            }
+                                            return RE::BSContainer::ForEachResult::kContinue;
+                                        }
+            );
+    }
+    else {
+		a_cell->ForEachReference(
+			[&a_origin,&result, &modulators](const RE::TESObjectREFR* ref)-> RE::BSContainer::ForEachResult {
+				if (!ref || ref->IsDisabled() || ref->IsDeleted() || ref->IsMarkedForDeletion()) return RE::BSContainer::ForEachResult::kContinue;
+				if (const auto form_id = ref->GetObjectReference()->GetFormID(); modulators.contains(form_id)) {
+                    if (!WorldObject::IsNextTo(a_origin, ref, Settings::proximity_range)) {
+				        return RE::BSContainer::ForEachResult::kContinue;
+                    }
+					result = form_id;
+					return RE::BSContainer::ForEachResult::kStop;
+				}
+				return RE::BSContainer::ForEachResult::kContinue;
+			}
+		);
+    }
+}
+

@@ -3,8 +3,15 @@
 #include <atomic>
 #include <shared_mutex>
 #include "ClibUtil/editorID.hpp"
+#include <ranges>
+#include "rapidjson/document.h"
+#include <rapidjson/stringbuffer.h>
+#include <rapidjson/istreamwrapper.h>
+#include <rapidjson/error/en.h>
+#include <rapidjson/writer.h>
 
 const auto mod_name = static_cast<std::string>(SKSE::PluginDeclaration::GetSingleton()->GetName());
+const auto plugin_version = SKSE::PluginDeclaration::GetSingleton()->GetVersion();
 constexpr auto po3path = "Data/SKSE/Plugins/po3_Tweaks.dll";
 constexpr auto po3_UoTpath = "Data/SKSE/Plugins/po3_UseOrTake.dll";
 inline bool IsPo3Installed() { return std::filesystem::exists(po3path); };
@@ -17,7 +24,6 @@ const auto po3_err_msgbox = std::format(
 const auto general_err_msgbox = std::format("{}: Something went wrong. Please contact the mod author.", mod_name);
 const auto init_err_msgbox = std::format("{}: The mod failed to initialize and will be terminated.", mod_name);
 
-
 void SetupLog();
 std::filesystem::path GetLogPath();
 std::vector<std::string> ReadLogFile();
@@ -26,7 +32,14 @@ std::string DecodeTypeCode(std::uint32_t typeCode);
 
 bool FileIsEmpty(const std::string& filename);
 
+std::vector<std::pair<int, bool>> encodeString(const std::string& inputString);
+std::string decodeString(const std::vector<std::pair<int, bool>>& encodedValues);
+
+void hexToRGBA(uint32_t color_code, RE::NiColorA& nicolora);
+
 inline bool isValidHexWithLength7or8(const char* input);
+
+
 
 template <class T = RE::TESForm>
 static T* GetFormByID(const RE::FormID id, const std::string& editor_id="") {
@@ -37,9 +50,9 @@ static T* GetFormByID(const RE::FormID id, const std::string& editor_id="") {
     return nullptr;
 };
 
-const std::string GetEditorID(const FormID a_formid);
+std::string GetEditorID(const FormID a_formid);
 
-FormID GetFormEditorIDFromString(const std::string formEditorId);
+FormID GetFormEditorIDFromString(const std::string& formEditorId);
 
 inline bool FormIsOfType(const RE::TESForm* form, RE::FormType type);
 
@@ -49,8 +62,8 @@ bool IsPoisonItem(const RE::TESForm* form);
 
 bool IsMedicineItem(const RE::TESForm* form);
 
-void OverrideMGEFFs(RE::BSTArray<RE::Effect*>& effect_array, std::vector<FormID> new_effects,
-                            std::vector<uint32_t> durations, std::vector<float> magnitudes);
+void OverrideMGEFFs(RE::BSTArray<RE::Effect*>& effect_array, const std::vector<FormID>& new_effects,
+                            const std::vector<uint32_t>& durations, const std::vector<float>& magnitudes);
 
 inline bool IsDynamicFormID(const FormID a_formID) { return a_formID >= 0xFF000000; }
 
@@ -58,7 +71,7 @@ void FavoriteItem(const RE::TESBoundObject* item, RE::TESObjectREFR* inventory_o
 
 [[nodiscard]] bool IsFavorited(RE::TESBoundObject* item, RE::TESObjectREFR* inventory_owner);
 
-[[nodiscard]] inline bool IsFavorited(RE::FormID formid, RE::FormID refid) {
+[[nodiscard]] inline bool IsFavorited(const RE::FormID formid, const RE::FormID refid) {
     return IsFavorited(GetFormByID<RE::TESBoundObject>(formid),GetFormByID<RE::TESObjectREFR>(refid));
 }
 
@@ -72,15 +85,29 @@ inline void FavoriteItem(const FormID formid, const FormID refid) {
 
 void EquipItem(const RE::TESBoundObject* item, bool unequip = false);
 
-inline void EquipItem(const FormID formid, bool unequip = false) {
+inline void EquipItem(const FormID formid, const bool unequip = false) {
 	EquipItem(GetFormByID<RE::TESBoundObject>(formid), unequip);
 }
 
 [[nodiscard]] bool IsEquipped(RE::TESBoundObject* item);
 
-[[nodiscard]] inline const bool IsEquipped(const FormID formid) {
+[[nodiscard]] inline bool IsEquipped(const FormID formid) {
 	return IsEquipped(GetFormByID<RE::TESBoundObject>(formid));
 }
+
+template <typename T>
+void ForEachForm(std::function<bool(T*)> a_callback) {
+    const auto& [map,lock] = RE::TESForm::GetAllForms();
+	RE::BSReadLockGuard locker{ lock };
+    for (auto& [id, form] : *map) {
+		if (!form) continue;
+		if (!form->Is(T::FORMTYPE)) continue;
+		if (auto* casted_form = skyrim_cast<T*>(form); casted_form && a_callback(casted_form)) return;
+    }
+};
+
+// https://github.com/SteveTownsend/SmartHarvestSE/blob/f709333c4cedba061ad21b4d92c90a720e20d2b1/src/WorldState/LocationTracker.cpp#L756
+bool AreAdjacentCells(RE::TESObjectCELL* cellA, RE::TESObjectCELL* cellB);
 
 namespace Types {
 
@@ -104,7 +131,7 @@ namespace Types {
 
     struct FormEditorID {
         FormID form_id=0;
-        std::string editor_id = "";
+        std::string editor_id;
 
         bool operator<(const FormEditorID& other) const;
     };
@@ -236,7 +263,7 @@ namespace xData {
     template <typename T>
     void CopyExtraData(T* from, T* to){
         if (!from || !to) return;
-        switch (T->EXTRADATATYPE) {
+        switch (T::EXTRADATATYPE) {
             case RE::ExtraDataType::kEnchantment:
                 CopyEnchantment(from, to);
                 break;
@@ -288,7 +315,7 @@ namespace xData {
             default:
                 logger::warn("ExtraData type not found");
                 break;
-        };
+        }
     }
 
     [[nodiscard]] bool UpdateExtras(RE::ExtraDataList* copy_from, RE::ExtraDataList* copy_to);
@@ -326,6 +353,14 @@ namespace WorldObject {
 		}
     }
 
+    RE::bhkRigidBody* GetRigidBody(const RE::TESObjectREFR* refr);
+
+    RE::NiPoint3 GetPosition(const RE::TESObjectREFR* obj);
+
+    bool SearchItemInCell(FormID a_formid, RE::TESObjectCELL* a_cell, float radius);
+
+    bool IsNextTo(const RE::TESObjectREFR* a_obj, const RE::TESObjectREFR* a_target,float range);
+
 };
 
 namespace Inventory {
@@ -336,7 +371,7 @@ namespace Inventory {
 
     inline std::int32_t GetItemCount(RE::TESBoundObject* item, RE::TESObjectREFR* inventory_owner);
 
-    bool IsQuestItem(const FormID formid, RE::TESObjectREFR* inv_owner);
+    bool IsQuestItem(FormID formid, RE::TESObjectREFR* inv_owner);
 
     /*template <typename T>
     void UpdateItemList() {
@@ -360,7 +395,7 @@ namespace Menu {
 
     template <typename T>
     void UpdateItemList() {
-        if (auto ui = RE::UI::GetSingleton(); ui->IsMenuOpen(T::MENU_NAME)) {
+        if (const auto ui = RE::UI::GetSingleton(); ui->IsMenuOpen(T::MENU_NAME)) {
             if (auto inventory_menu = ui->GetMenu<T>()) {
                 if (auto itemlist = inventory_menu->GetRuntimeData().itemList) {
                     //logger::trace("Updating itemlist.");
@@ -425,18 +460,18 @@ struct FormTraits {
 
 template <>
 struct FormTraits<RE::AlchemyItem> {
-    static float GetWeight(RE::AlchemyItem* form) { 
+    static float GetWeight(const RE::AlchemyItem* form) { 
         return form->weight;
     }
 
-    static void SetWeight(RE::AlchemyItem* form, float weight) { 
+    static void SetWeight(RE::AlchemyItem* form, const float weight) { 
         form->weight = weight;
     }
 
-    static int GetValue(RE::AlchemyItem* form) {
+    static int GetValue(const RE::AlchemyItem* form) {
         return form->GetGoldValue();
     }
-    static void SetValue(RE::AlchemyItem* form, int value) { 
+    static void SetValue(RE::AlchemyItem* form, const int value) { 
         logger::trace("CostOverride: {}", form->data.costOverride);
         form->data.costOverride = value;
     }
@@ -448,18 +483,18 @@ struct FormTraits<RE::AlchemyItem> {
 
 template <>
 struct FormTraits<RE::IngredientItem> {
-	static float GetWeight(RE::IngredientItem* form) { 
+	static float GetWeight(const RE::IngredientItem* form) { 
 		return form->weight;
 	}
 
-	static void SetWeight(RE::IngredientItem* form, float weight) { 
+	static void SetWeight(RE::IngredientItem* form, const float weight) { 
 		form->weight = weight;
 	}
 
-	static int GetValue(RE::IngredientItem* form) {
+	static int GetValue(const RE::IngredientItem* form) {
 		return form->GetGoldValue();
 	}
-	static void SetValue(RE::IngredientItem* form, int value) { 
+	static void SetValue(RE::IngredientItem* form, const int value) { 
 		form->value = value;
 	}
 
@@ -470,7 +505,7 @@ struct FormTraits<RE::IngredientItem> {
         
 template <>
 struct FormTraits<RE::TESAmmo> {
-    static float GetWeight(RE::TESAmmo* form) {
+    static float GetWeight(const RE::TESAmmo* form) {
         // Default implementation, assuming T has a member variable 'weight'
         return form->GetWeight();
     }
@@ -480,12 +515,12 @@ struct FormTraits<RE::TESAmmo> {
         return;
     }
 
-    static int GetValue(RE::TESAmmo* form) {
+    static int GetValue(const RE::TESAmmo* form) {
         // Default implementation, assuming T has a member variable 'value'
         return form->value;
     }
 
-    static void SetValue(RE::TESAmmo* form, int value) { form->value = value; }
+    static void SetValue(RE::TESAmmo* form, const int value) { form->value = value; }
 
     static RE::BSTArray<RE::Effect*> GetEffects(RE::TESAmmo*) {
         RE::BSTArray<RE::Effect*> effects;

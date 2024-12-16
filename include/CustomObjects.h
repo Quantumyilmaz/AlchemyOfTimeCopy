@@ -12,7 +12,7 @@ struct StageEffect {
     std::uint32_t duration;  // in effectitem (not Duration, this is in seconds)
 
     StageEffect() : beffect(0), magnitude(0), duration(0) {}
-    StageEffect(FormID be, float mag, DurationMGEFF dur) : beffect(be), magnitude(mag), duration(dur) {}
+    StageEffect(const FormID be, const float mag, const DurationMGEFF dur) : beffect(be), magnitude(mag), duration(dur) {}
 
     [[nodiscard]] bool IsNull() const { return beffect == 0; }
     [[nodiscard]] bool HasMagnitude() const { return magnitude != 0; }
@@ -29,10 +29,12 @@ struct Stage {
 
     bool crafting_allowed;
 
+    uint32_t color;
 
-    Stage(){};
-    Stage(FormID f, Duration d, StageNo s, StageName n, bool ca,std::vector<StageEffect> e)
-        : formid(f), duration(d), no(s), name(n), crafting_allowed(ca) ,mgeffect(e) {
+
+    Stage(){}
+    Stage(const FormID f, const Duration d, const StageNo s, StageName n, const bool ca, const std::vector<StageEffect>& e, const uint32_t color_ = 0)
+        : formid(f), duration(d), no(s), name(std::move(n)), mgeffect(e) ,crafting_allowed(ca), color(color_) {
         if (!formid) logger::critical("FormID is null");
         else logger::trace("Stage: FormID {}, Duration {}, StageNo {}, Name {}", formid, duration, no, name);
         if (e.empty()) mgeffect.clear();
@@ -52,11 +54,11 @@ struct Stage {
         return no == other.no && formid == other.formid && duration == other.duration;
     }
 
-    RE::TESBoundObject* GetBound() const { return GetFormByID<RE::TESBoundObject>(formid); };
+    [[nodiscard]] RE::TESBoundObject* GetBound() const { return GetFormByID<RE::TESBoundObject>(formid); }
 
     [[nodiscard]] bool CheckIntegrity() const;
 
-    inline const char* GetExtraText() const { return GetBound()->GetName(); }
+    [[nodiscard]] const char* GetExtraText() const { return GetBound()->GetName(); }
 
 };
 
@@ -104,15 +106,15 @@ struct StageInstance {
 
     // times are very close (abs diff less than 0.015h = 0.9min)
     // assumes that they are in the same inventory
-	[[nodiscard]] bool AlmostSameExceptCount(StageInstance& other, float curr_time) const;
+	[[nodiscard]] bool AlmostSameExceptCount(const StageInstance& other, float curr_time) const;
 
     StageInstance& operator=(const StageInstance& other);
 
-    inline RE::TESBoundObject* GetBound() const { return GetFormByID<RE::TESBoundObject>(xtra.form_id); };
+    [[nodiscard]] RE::TESBoundObject* GetBound() const { return GetFormByID<RE::TESBoundObject>(xtra.form_id); };
 
-    float GetElapsed(float curr_time) const;
+    [[nodiscard]] inline float GetElapsed(float curr_time) const;
 
-    float GetDelaySlope() const;
+    [[nodiscard]] inline float GetDelaySlope() const;
 
     void SetNewStart(float curr_time, float overshot);
 
@@ -120,28 +122,27 @@ struct StageInstance {
 
     void SetTransform(float time, FormID formid);
 
-    float GetTransformElapsed(const float curr_time) const { return GetElapsed(curr_time) - _elapsed; }
+    [[nodiscard]] float GetTransformElapsed(const float curr_time) const { return GetElapsed(curr_time) - _elapsed; }
 
     void RemoveTransform(float curr_time);
 
-    // use only for WO (e.g. HandleDrop)
     void RemoveTimeMod(float time);
 
-    float GetDelayMagnitude() const { return GetDelaySlope(); }
+    [[nodiscard]] float GetDelayMagnitude() const { return GetDelaySlope(); }
 
-    FormID GetDelayerFormID() const { return _delay_formid; }
+    [[nodiscard]] FormID GetDelayerFormID() const { return _delay_formid; }
 
-    float GetHittingTime(const float schranke) const {
+    [[nodiscard]] float GetHittingTime(const float schranke) const {
         // _elapsed + dt*_delay_mag = schranke
         return _delay_start + (schranke - _elapsed) / (GetDelaySlope() + std::numeric_limits<float>::epsilon());
-    };
+    }
 
-    float GetTransformHittingTime(const float schranke) const{
+    [[nodiscard]] float GetTransformHittingTime(const float schranke) const{
         if (!xtra.is_transforming) return 0;
 		return GetHittingTime(schranke+_elapsed);
     }
 
-    StageInstancePlain GetPlain() const;
+    [[nodiscard]] StageInstancePlain GetPlain() const;
 
     void SetDelay(const StageInstancePlain& plain);
 
@@ -160,12 +161,37 @@ struct StageUpdate {
     Duration update_time=0;
     bool new_is_fake=false;
 
-    StageUpdate(const Stage* old, const Stage* new_, Count c, 
-        Duration u_t,
-        bool fake)
+    StageUpdate(const Stage* old, const Stage* new_, const Count c,
+        const Duration u_t,
+        const bool fake)
 		: oldstage(old), newstage(new_), count(c), 
         update_time(u_t), 
         new_is_fake(fake) {}
+};
+
+struct AddOnSettings {
+    std::set<FormID> containers;
+    std::map<FormID,float> delayers;
+    std::vector<FormID> delayers_order;
+    std::map<FormID, std::tuple<FormID, Duration, std::vector<StageNo>>> transformers;
+	std::vector<FormID> transformers_order;
+    std::map<FormID,uint32_t> delayer_colors;
+    std::map<FormID,uint32_t> transformer_colors;
+    std::map<FormID,FormID> delayer_sounds;
+    std::map<FormID,FormID> transformer_sounds;
+	std::map<FormID, FormID> delayer_artobjects;
+	std::map<FormID, FormID> transformer_artobjects;
+	std::map<FormID, FormID> delayer_effect_shaders;
+	std::map<FormID, FormID> transformer_effect_shaders;
+
+    [[nodiscard]] bool IsHealthy() const { return !init_failed; }
+
+    [[nodiscard]] bool CheckIntegrity();
+
+    [[nodiscard]] bool IsEmpty();
+
+private:
+    bool init_failed = false;
 };
 
 struct DefaultSettings {
@@ -178,11 +204,26 @@ struct DefaultSettings {
     std::map<StageNo, std::vector<StageEffect>> effects = {};
     std::vector<StageNo> numbers = {};
     FormID decayed_id = 0;
+    std::map<StageNo, uint32_t> colors = {};
+	std::map<StageNo, FormID> sounds = {};
+	std::map<StageNo, FormID> artobjects = {};
+	std::map<StageNo, FormID> effect_shaders = {};
 
+
+    std::set<FormID> containers;
     std::map<FormID,float> delayers;
     std::vector<FormID> delayers_order;
     std::map<FormID, std::tuple<FormID, Duration, std::vector<StageNo>>> transformers;
 	std::vector<FormID> transformers_order;
+    std::map<FormID,uint32_t> delayer_colors;
+    std::map<FormID,uint32_t> transformer_colors;
+	std::map<FormID, FormID> delayer_sounds;
+	std::map<FormID, FormID> transformer_sounds;
+	std::map<FormID, FormID> delayer_artobjects;
+	std::map<FormID, FormID> transformer_artobjects;
+	std::map<FormID, FormID> delayer_effect_shaders;
+	std::map<FormID, FormID> transformer_effect_shaders;
+    
 
     [[nodiscard]] bool IsHealthy() const { return !init_failed; }
 
@@ -190,8 +231,98 @@ struct DefaultSettings {
 
     [[nodiscard]] bool IsEmpty();
 
+    void Add(AddOnSettings& addon);
+    static void AddHelper(std::map<FormID, FormID>& dest, const std::map<FormID, FormID>& src);
+
 private:
     bool init_failed = false;
 };
 
 using CustomSettings = std::map<std::vector<std::string>, DefaultSettings>;
+
+class SoundHelper {
+	std::map<RefID, RE::BSSoundHandle> handles;
+
+	std::shared_mutex mutex;
+public:
+    static SoundHelper* GetSingleton() {
+        static SoundHelper singleton;
+        return &singleton;
+    }
+
+	RE::BSSoundHandle& GetHandle(const RefID refid) {
+		std::shared_lock lock(mutex);
+		if (handles.contains(refid)) return handles.at(refid);
+		handles[refid] = RE::BSSoundHandle();
+		return handles.at(refid);
+	}
+
+	void DeleteHandle(RefID refid);
+
+
+    void Stop(RefID refid);
+	void Play(RefID refid, FormID sound_id, float volume);
+};
+
+struct RefStopFeature {
+	uint32_t id = 0;
+	std::atomic<bool> enabled = false;
+
+    explicit operator bool() const;
+
+    RefStopFeature();
+    explicit RefStopFeature(const uint32_t i) : id(i) {}
+
+    RefStopFeature& operator=(const RefStopFeature& other);
+
+};
+
+struct RefStop {
+
+    ~RefStop();
+
+    bool operator<(const RefStop& other) const {
+        return ref_id < other.ref_id;
+    }
+
+    RefStop& operator=(const RefStop& other);
+    
+    RefID ref_id = 0;
+    float stop_time = 0;
+	RefStopFeature tint_color;
+	RefStopFeature art_object;
+	RefStopFeature effect_shader;
+	RefStopFeature sound;
+
+	//RE::ShaderReferenceEffect* shader_ref_eff;
+	//RE::ModelReferenceEffect* model_ref_eff;
+
+	std::set<FormID> applied_art_objects;
+	std::set<FormID> applied_effect_shaders;
+
+    RefStop() = default;
+    explicit RefStop(RefID ref_id_);
+	RefStop(const RefID ref_id_, const float stop_t, const uint32_t color, const FormID art_id, const FormID shader_id, const FormID sound_id)
+		: ref_id(ref_id_),stop_time(stop_t), tint_color(color), art_object(art_id), effect_shader(shader_id), sound(sound_id) {
+	}
+
+	[[nodiscard]] bool IsDue(float curr_time) const;
+
+    void ApplyTint(RE::NiAVObject* a_obj3d);
+    void ApplyArtObject(RE::TESObjectREFR* a_ref, float duration=-1.f);
+	void ApplyShader(RE::TESObjectREFR* a_ref, float duration=-1.f);
+	void ApplySound(float volume=200.f);
+    void ApplyAll(RE::TESObjectREFR* a_ref);
+    [[nodiscard]] RE::BSSoundHandle& GetSoundHandle() const;
+
+	void RemoveTint(RE::NiAVObject* a_obj3d);
+	void RemoveArtObject();
+	void RemoveShader();
+	void RemoveSound();
+	void RemoveAll(RE::NiAVObject* a_obj3d);
+
+    static bool HasArtObject(RE::TESObjectREFR* a_ref, const RE::BGSArtObject* a_art);
+
+	void Update(const RefStop& other);
+
+};

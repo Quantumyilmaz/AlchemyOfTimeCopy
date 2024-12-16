@@ -15,8 +15,8 @@ class Manager final : public Ticker, public SaveLoadData {
 
     // 0x0003eb42 damage health
 
-    //std::mutex mutex;
-    std::shared_mutex sharedMutex_;
+    std::shared_mutex sourceMutex_;
+    std::shared_mutex queueMutex_;
 
     std::vector<Source> sources;
 
@@ -24,27 +24,30 @@ class Manager final : public Ticker, public SaveLoadData {
 
     unsigned int _instance_limit = 200000;
 
-    std::map<RefID, float> _ref_stops_;
+    std::map<RefID, RefStop> _ref_stops_;
     std::set<RefID> queue_delete_;
-    std::atomic<bool> listen_woupdate = true;
 
     std::set<FormID> do_not_register;
 
-    void WoUpdateLoop(float curr_time, std::map<RefID, float> ref_stops_copy);
+    void WoUpdateLoop(const std::vector<RefID>& refs);
 
     void UpdateLoop();
 
-    void QueueWOUpdate(RefID refid, float stop_t);
+    void QueueWOUpdate(const RefStop& a_refstop);
+
+    static void UpdateRefStop(Source& src, const StageInstance& wo_inst, RefStop& a_ref_stop, float stop_t);
 
     [[nodiscard]] unsigned int GetNInstances();
 
-    [[nodiscard]] Source* MakeSource(FormID source_formid, DefaultSettings* settings);
+    [[nodiscard]] Source* MakeSource(FormID source_formid, const DefaultSettings* settings);
 
-    void CleanUpSourceData(Source* src);
+    static void CleanUpSourceData(Source* src);
 
     [[nodiscard]] Source* GetSource(FormID some_formid);
 
     [[nodiscard]] Source* ForceGetSource(FormID some_formid);
+
+    static bool IsSource(FormID some_formid);
 
     [[nodiscard]] StageInstance* GetWOStageInstance(const RE::TESObjectREFR* wo_ref);
 
@@ -59,7 +62,7 @@ class Manager final : public Ticker, public SaveLoadData {
     static inline void ApplyEvolutionInInventory_(RE::TESObjectREFR* inventory_owner, Count update_count, FormID old_item,
                                                   FormID new_item);
 
-    void ApplyEvolutionInInventory(std::string _qformtype_, RE::TESObjectREFR* inventory_owner, Count update_count,
+    void ApplyEvolutionInInventory(const std::string& _qformtype_, RE::TESObjectREFR* inventory_owner, Count update_count,
                                    FormID old_item, FormID new_item);
 
     static inline void RemoveItem(RE::TESObjectREFR* moveFrom, FormID item_id, Count count);
@@ -75,13 +78,15 @@ class Manager final : public Ticker, public SaveLoadData {
 	void SyncWithInventory(RE::TESObjectREFR* ref);
     void UpdateRef(RE::TESObjectREFR* loc);
 
+	RefStop* GetRefStop(RefID refid);
+
 public:
     Manager(const std::vector<Source>& data, const std::chrono::milliseconds interval)
         : Ticker([this]() { UpdateLoop(); }, interval), sources(data) {
         Init();
-    };
+    }
 
-    static Manager* GetSingleton(const std::vector<Source>& data, const int u_intervall = 3000) {
+    static Manager* GetSingleton(const std::vector<Source>& data, const int u_intervall = Settings::Ticker::GetInterval(Settings::ticker_speed)) {
         static Manager singleton(data, std::chrono::milliseconds(u_intervall));
         return &singleton;
     }
@@ -96,10 +101,13 @@ public:
 
     void Uninstall() {isUninstalled.store(true);}
 
-    void ClearWOUpdateQueue() { _ref_stops_.clear(); }
+	void ClearWOUpdateQueue() {
+		std::unique_lock lock(queueMutex_);
+	    _ref_stops_.clear();
+	}
 
     // use it only for world objects! checks if there is a stage instance for the given refid
-    [[nodiscard]] bool RefIsRegistered(RefID refid) const;
+    [[nodiscard]] bool RefIsRegistered(RefID refid);
 
     void Register(FormID some_formid, Count count, RefID location_refid,
                                            Duration register_time = 0);
@@ -128,13 +136,26 @@ public:
 
     void Print();
 
-    const std::vector<Source>& GetSources() const { return sources; }
+    std::vector<Source> GetSources() {
+		std::shared_lock lock(sourceMutex_);
+        return sources;
+    }
 
-	const std::map<RefID, float>& GetUpdateQueue() const { return _ref_stops_; }
+    std::map<RefID, float> GetUpdateQueue() {
+		std::map<RefID, float> _ref_stops_copy;
+		std::shared_lock lock(queueMutex_);
+		for (const auto& [key, value] : _ref_stops_) {
+			_ref_stops_copy[key] = value.stop_time;
+		}
+        return _ref_stops_copy;
+    }
 
 	void HandleDynamicWO(RE::TESObjectREFR* ref);
 
     void HandleWOBaseChange(RE::TESObjectREFR* ref);
 
+	bool IsTickerActive() const {
+	    return isRunning();
+	}
 
 };

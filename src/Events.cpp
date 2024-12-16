@@ -3,12 +3,7 @@
 void OurEventSink::HandleWO(RE::TESObjectREFR* ref) const
 {
     if (!ref) return;
-    M->HandleDynamicWO(ref);
-    if (!Settings::world_objects_evolve) return;
-    if (ref->IsDisabled() || ref->IsDeleted() || ref->IsMarkedForDeletion()) return;
-    if (ref->IsActivationBlocked()) return;
     //if (ref->extraList.GetOwner() && !ref->extraList.GetOwner()->IsPlayer()) return;
-    if (RE::PlayerCharacter::GetSingleton()->WouldBeStealing(ref)) return;
     if (!Settings::IsItem(ref)) return;
     if (ref->extraList.HasType(RE::ExtraDataType::kStartingPosition)) {
         if (const auto starting_pos = ref->extraList.GetByType<RE::ExtraStartingPosition>(); starting_pos->location) {
@@ -104,8 +99,15 @@ RE::BSEventNotifyControl OurEventSink::ProcessEvent(const SKSE::CrosshairRefEven
 	//if (event->crosshairRef->HasContainer()) M->Update(event->crosshairRef.get());
     /*else HandleWO(event->crosshairRef.get());*/
 
+	//const auto curr_time = RE::Calendar::GetSingleton()->GetHoursPassed();
+	//if (last_crosshair_ref_update.first == event->crosshairRef->GetFormID()) {
+	//	if (curr_time - last_crosshair_ref_update.second < min_last_crosshair_update_time) return RE::BSEventNotifyControl::kContinue;
+ //   }
+
     if (!event->crosshairRef->HasContainer()) HandleWO(event->crosshairRef.get());
 	else if (M->RefIsRegistered(event->crosshairRef->GetFormID())) M->Update(event->crosshairRef.get());
+
+	//last_crosshair_ref_update = { event->crosshairRef->GetFormID(), curr_time};
         
     return RE::BSEventNotifyControl::kContinue;
 }
@@ -204,18 +206,19 @@ RE::BSEventNotifyControl OurEventSink::ProcessEvent(const RE::TESWaitStopEvent*,
 
 RE::BSEventNotifyControl OurEventSink::ProcessEvent(const RE::BGSActorCellEvent* a_event, RE::BSTEventSource<RE::BGSActorCellEvent>*)
 {
+	if (block_eventsinks.load()) return RE::BSEventNotifyControl::kContinue;
     if (!listen_cellchange.load()) return RE::BSEventNotifyControl::kContinue;
     if (!a_event) return RE::BSEventNotifyControl::kContinue;
-    auto eventActorHandle = a_event->actor;
-    auto eventActorPtr = eventActorHandle ? eventActorHandle.get() : nullptr;
-    auto eventActor = eventActorPtr ? eventActorPtr.get() : nullptr;
+    const auto eventActorHandle = a_event->actor;
+    const auto eventActorPtr = eventActorHandle ? eventActorHandle.get() : nullptr;
+    const auto eventActor = eventActorPtr ? eventActorPtr.get() : nullptr;
     if (!eventActor) return RE::BSEventNotifyControl::kContinue;
 
     if (eventActor != RE::PlayerCharacter::GetSingleton()) return RE::BSEventNotifyControl::kContinue;
 
-    auto cellID = a_event->cellID;
+    const auto cellID = a_event->cellID;
     auto* cellForm = cellID ? RE::TESForm::LookupByID(cellID) : nullptr;
-    auto* cell = cellForm ? cellForm->As<RE::TESObjectCELL>() : nullptr;
+    const auto* cell = cellForm ? cellForm->As<RE::TESObjectCELL>() : nullptr;
     if (!cell) return RE::BSEventNotifyControl::kContinue;
 
     if (a_event->flags.any(RE::BGSActorCellEvent::CellFlag::kEnter)) {

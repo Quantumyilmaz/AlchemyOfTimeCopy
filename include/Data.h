@@ -1,4 +1,5 @@
 #pragma once
+#include <algorithm>
 #include "DynamicFormTracker.h"
 
 struct Source {
@@ -10,18 +11,20 @@ struct Source {
 
     FormID formid = 0;
     std::string editorid;
-    DefaultSettings* defaultsettings = nullptr;  // eigentlich sollte settings heissen
     std::string qFormType;
+    DefaultSettings settings;
 
     
     Source(const FormID id, const std::string& id_str,   // NOLINT(modernize-pass-by-value)
         //RE::EffectSetting* e_m, 
-        DefaultSettings* sttngs=nullptr)
-        : formid(id), editorid(id_str),
-          //empty_mgeff(e_m), 
-        defaultsettings(sttngs) { Init(); }
+        const DefaultSettings* sttngs=nullptr)
+        : formid(id), editorid(id_str)
+          //empty_mgeff(e_m)
+          { Init(sttngs); }
 
     [[maybe_unused]] [[nodiscard]] std::string_view GetName() const;
+
+    void UpdateAddons();
 
     [[nodiscard]] RE::TESBoundObject* GetBoundObject() const { return GetFormByID<RE::TESBoundObject>(formid, editorid); };
 
@@ -62,10 +65,16 @@ struct Source {
 
     FormID inline GetModulatorInInventory(RE::TESObjectREFR* inventory_owner) const;
 
+    FormID inline GetModulatorInWorld(const RE::TESObjectREFR* wo) const;
+
     inline FormID GetTransformerInInventory(RE::TESObjectREFR* inventory_owner) const;
+
+    inline FormID GetTransformerInWorld(const RE::TESObjectREFR* wo) const;
 
     // always update before doing this
     void UpdateTimeModulationInInventory(RE::TESObjectREFR* inventory_owner, float _time);
+
+    void UpdateTimeModulationInWorld(RE::TESObjectREFR* wo, StageInstance& wo_inst, float _time) const;
 
     float GetNextUpdateTime(StageInstance* st_inst);
 
@@ -79,11 +88,15 @@ struct Source {
         return !init_failed;
 	}
 
-	const Stage& GetDecayedStage() const { return decayed_stage; }
+	[[nodiscard]] const Stage& GetDecayedStage() const { return decayed_stage; }
+
+	[[nodiscard]] bool ShouldFreezeEvolution(const FormID loc_formid) const {
+        return !settings.containers.empty() && !settings.containers.contains(loc_formid);   
+    }
 
 private:
 
-    void Init();
+    void Init(const DefaultSettings* defaultsettings);
 
     RE::FormType formtype;
     std::set<StageNo> fake_stages;
@@ -105,14 +118,14 @@ private:
         std::vector<uint32_t> pMGEFFdurations;
         std::vector<float> pMGEFFmagnitudes;
 
-        // i need this many empty effects
+        // I need this many empty effects
         int n_empties = static_cast<int>(_effects.size()) - static_cast<int>(settings_effs.size());
-        if (n_empties < 0) n_empties = 0;
+        n_empties = std::max(n_empties, 0);
 
-        for (int j = 0; j < settings_effs.size(); j++) {
-            MGEFFs.push_back(settings_effs[j].beffect);
-            pMGEFFdurations.push_back(settings_effs.at(j).duration);
-            pMGEFFmagnitudes.push_back(settings_effs.at(j).magnitude);
+        for (auto& settings_eff : settings_effs) {
+            MGEFFs.push_back(settings_eff.beffect);
+            pMGEFFdurations.push_back(settings_eff.duration);
+            pMGEFFmagnitudes.push_back(settings_eff.magnitude);
         }
 
         for (int j = 0; j < n_empties; j++) {
@@ -126,24 +139,21 @@ private:
 
     template <typename T>
     void GatherStages()  {
-        for (StageNo stage_no: defaultsettings->numbers) {
-            const auto stage_formid = defaultsettings->items[stage_no];
+        for (StageNo stage_no: settings.numbers) {
+            const auto stage_formid = settings.items[stage_no];
             if (!stage_formid && stage_no != 0) {
                 if (Vector::HasElement(Settings::fakes_allowedQFORMS, qFormType))
                 {
                     fake_stages.insert(stage_no);
                     continue;
                 }
-                else {
-                    logger::critical("No ID given and copy items not allowed for this type {}", qFormType);
-					return;
-                }
+                logger::critical("No ID given and copy items not allowed for this type {}", qFormType);
+				return;
             }
 
             if (stage_no == 0) RegisterStage(formid, stage_no);
 			else {
-                const auto stage_form = GetFormByID(stage_formid, "");
-				if (!stage_form) {
+                if (const auto stage_form = GetFormByID(stage_formid, ""); !stage_form) {
                     logger::error("Stage form {} not found.", stage_formid);
 					continue;
 				}
@@ -152,7 +162,7 @@ private:
         }
     }
 
-    size_t GetNStages() const;
+    [[nodiscard]] size_t GetNStages() const;
     
     [[nodiscard]] Stage GetFinalStage() const;
 
@@ -160,8 +170,10 @@ private:
 
     void SetDelayOfInstances(float some_time, RE::TESObjectREFR* inventory_owner);
 
-    void SetDelayOfInstance(StageInstance& instance, float curr_time,
-                             RE::TESObjectREFR* inventory_owner) const;
+    void SetDelayOfInstance(StageInstance& instance, float curr_time, RE::TESObjectREFR* a_object, bool inventory_owner=true) const;
+
+    void SetDelayOfInstance(StageInstance& instance, float a_time, FormID a_transformer, FormID a_delayer, const std::vector<StageNo>&
+                            allowed_stages) const;
    
     [[nodiscard]] bool CheckIntegrity();
 
@@ -172,7 +184,7 @@ private:
     void RegisterStage(FormID stage_formid, StageNo stage_no);
 
     template <typename T>
-    const FormID FetchFake(const StageNo st_no) {
+    FormID FetchFake(const StageNo st_no) {
         auto* DFT = DynamicFormTracker::GetSingleton();
         if (editorid.empty()) {
 		    logger::error("Editorid is empty.");
@@ -182,18 +194,12 @@ private:
 
         if (const auto stage_form = GetFormByID<T>(new_formid)) {
             RegisterStage(new_formid, st_no);
-            if (auto it = stages.find(st_no); it == stages.end()) {
+            if (!stages.contains(st_no)) {
                 logger::error("Stage {} not found in stages.", st_no);
-                DFT->Delete(new_formid);
                 return 0;
             }
 
             // Update name of the fake form
-            if (!stages.contains(st_no)) {
-			    logger::error("Stage {} does not exist.", st_no);
-			    DFT->Delete(new_formid);
-			    return 0;
-		    }
             const auto& name = stages.at(st_no).name;
             const auto og_name = RE::TESForm::LookupByID(formid)->GetName();
             const auto new_name = std::string(og_name) + " (" + name + ")";
@@ -203,21 +209,20 @@ private:
             }
 
             // Update value of the fake form
-            const auto temp_value = defaultsettings->costoverrides[st_no];
+            const auto temp_value = settings.costoverrides[st_no];
             if (temp_value >= 0) FormTraits<T>::SetValue(stage_form, temp_value);
             // Update weight of the fake form
-            const auto temp_weight = defaultsettings->weightoverrides[st_no];
+            const auto temp_weight = settings.weightoverrides[st_no];
             if (temp_weight >= 0) FormTraits<T>::SetWeight(stage_form, temp_weight);
 
-            if (!defaultsettings->effects[st_no].empty() &&
+            if (!settings.effects[st_no].empty() &&
                 Vector::HasElement<std::string>(Settings::mgeffs_allowedQFORMS, qFormType)) {
                 // change mgeff of fake form
-                ApplyMGEFFSettings(stage_form, defaultsettings->effects[st_no]);
+                ApplyMGEFFSettings(stage_form, settings.effects[st_no]);
             }
 
         } else {
 		    logger::error("Could not create copy form for source {}", editorid);
-            DFT->Delete(new_formid);
 		    return 0;
 	    }
      
@@ -228,4 +233,8 @@ private:
     FormID FetchFake(StageNo st_no);
 
     StageNo GetLastStageNo();
+
+    static FormID SearchNearbyModulators(const RE::TESObjectREFR* a_obj, const std::vector<FormID>& candidates);
+
+    static void SearchModulatorInCell(FormID& result, const RE::TESObjectREFR* a_origin, const RE::TESObjectCELL* a_cell, const std::set<FormID>& modulators, float range=0);
 };

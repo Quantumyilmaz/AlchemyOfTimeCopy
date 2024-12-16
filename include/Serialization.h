@@ -12,10 +12,8 @@ struct DFSaveData {
 using DFSaveDataLHS = std::pair<FormID,std::string>;
 using DFSaveDataRHS = std::vector<DFSaveData>;
 
-std::vector<std::pair<int, bool>> encodeString(const std::string& inputString);
-std::string decodeString(const std::vector<std::pair<int, bool>>& encodedValues);
-bool read_string(SKSE::SerializationInterface* a_intfc, std::string& a_str);
-bool write_string(SKSE::SerializationInterface* a_intfc, const std::string& a_str);
+bool read_string(const SKSE::SerializationInterface* a_intfc, std::string& a_str);
+bool write_string(const SKSE::SerializationInterface* a_intfc, const std::string& a_str);
 
 // https :  // github.com/ozooma10/OSLAroused/blob/29ac62f220fadc63c829f6933e04be429d4f96b0/src/PersistedData.cpp
 // BaseData is based off how powerof3's did it in Afterlife
@@ -287,6 +285,6 @@ public:
         }
 
         return true;
-    };
+    }
 };
 
