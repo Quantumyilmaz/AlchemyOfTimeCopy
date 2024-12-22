@@ -183,6 +183,9 @@ struct AddOnSettings {
 	std::map<FormID, FormID> transformer_artobjects;
 	std::map<FormID, FormID> delayer_effect_shaders;
 	std::map<FormID, FormID> transformer_effect_shaders;
+    std::map<FormID,std::set<FormID>> delayer_containers;
+    std::map<FormID,std::set<FormID>> transformer_containers;
+
 
     [[nodiscard]] bool IsHealthy() const { return !init_failed; }
 
@@ -223,6 +226,8 @@ struct DefaultSettings {
 	std::map<FormID, FormID> transformer_artobjects;
 	std::map<FormID, FormID> delayer_effect_shaders;
 	std::map<FormID, FormID> transformer_effect_shaders;
+    std::map<FormID,std::set<FormID>> delayer_containers;
+    std::map<FormID,std::set<FormID>> transformer_containers;
     
 
     [[nodiscard]] bool IsHealthy() const { return !init_failed; }

@@ -279,6 +279,33 @@ void DefaultSettings::Add(AddOnSettings& addon)
 	AddHelper(transformer_artobjects, addon.transformer_artobjects);
 	AddHelper(delayer_effect_shaders, addon.delayer_effect_shaders);
 	AddHelper(transformer_effect_shaders, addon.transformer_effect_shaders);
+	// containers
+	for (const auto& [_formID, _containers] : addon.delayer_containers) {
+		if (!_formID) {
+			logger::critical("AddOn has null formid.");
+			continue;
+		}
+		for (const auto& _container : _containers) {
+			if (!_container) {
+				logger::critical("AddOn has null formid.");
+				continue;
+			}
+			delayer_containers[_formID].insert(_container);
+		}
+	}
+	for (const auto& [_formID, _containers] : addon.transformer_containers) {
+		if (!_formID) {
+			logger::critical("AddOn has null formid.");
+			continue;
+		}
+		for (const auto& _container : _containers) {
+			if (!_container) {
+				logger::critical("AddOn has null formid.");
+				continue;
+			}
+			transformer_containers[_formID].insert(_container);
+		}
+	}
 
 
 }

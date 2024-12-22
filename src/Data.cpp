@@ -477,11 +477,18 @@ bool Source::IsDecayedItem(const FormID _form_id) const {
 }
 
 inline FormID Source::GetModulatorInInventory(RE::TESObjectREFR* inventory_owner) const {
+    const auto inventory_owner_base_id = inventory_owner->GetBaseObject()->GetFormID();
     const auto inventory = inventory_owner->GetInventory();
     for (const auto& dlyr_fid : settings.delayers_order) {
         if (const auto entry = inventory.find(RE::TESForm::LookupByID<RE::TESBoundObject>(dlyr_fid));
             entry != inventory.end() && entry->second.first > 0) {
-            return dlyr_fid;
+			if (!settings.delayer_containers.contains(dlyr_fid) ||
+                settings.delayer_containers.at(dlyr_fid).empty()) {
+				return dlyr_fid;
+			}
+			if (settings.delayer_containers.at(dlyr_fid).contains(inventory_owner_base_id)) {
+				return dlyr_fid;
+            }
         }
     }
     return 0;
@@ -495,11 +502,18 @@ inline FormID Source::GetModulatorInWorld(const RE::TESObjectREFR* wo) const
 }
 
 inline FormID Source::GetTransformerInInventory(RE::TESObjectREFR* inventory_owner) const {
+	const auto inventory_owner_base_id = inventory_owner->GetBaseObject()->GetFormID();
     const auto inventory = inventory_owner->GetInventory();
 	for (const auto& trns_fid : settings.transformers_order) {
 		if (const auto entry = inventory.find(RE::TESForm::LookupByID<RE::TESBoundObject>(trns_fid));
 			entry != inventory.end() && entry->second.first > 0) {
-			return trns_fid;
+			if (!settings.transformer_containers.contains(trns_fid) ||
+				settings.transformer_containers.at(trns_fid).empty()) {
+				return trns_fid;
+			}
+			if (settings.transformer_containers.at(trns_fid).contains(inventory_owner_base_id)) {
+				return trns_fid;
+			}
 		}
 	}
 	return 0;
@@ -954,7 +968,7 @@ bool Source::CheckIntegrity() {
         }
     }
 
-    for (auto stage : stages | std::views::values) {
+    for (const auto& stage: stages | std::views::values) {
         if (!stage.CheckIntegrity()) {
 			logger::error("Stage integrity check failed for stage no {} and source {} {}", stage.no,formid,editorid);
 			return false;

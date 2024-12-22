@@ -278,7 +278,15 @@ AddOnSettings parseAddOns_(const YAML::Node& config)
 			settings.delayer_effect_shaders[temp_formid] = shader_formid;
         }
 
-
+		// containers
+		if (modulator["containers"] && !modulator["containers"].IsNull()) {
+			const auto temp_containers = modulator["containers"].IsScalar() ? std::vector{ modulator["containers"].as<std::string>() } : modulator["containers"].as<std::vector<std::string>>();
+			for (const auto& container : temp_containers) {
+				if (const FormID container_formid = GetFormEditorIDFromString(container)) {
+					settings.delayer_containers[temp_formid].insert(container_formid);
+				}
+            }
+        }
     }
 
 	// transformers
@@ -336,6 +344,16 @@ AddOnSettings parseAddOns_(const YAML::Node& config)
 		if (transformer["effect_shader"] && !transformer["effect_shader"].IsNull()) {
 			const auto shader_formid = GetFormEditorIDFromString(transformer["effect_shader"].as<std::string>());
 			settings.transformer_effect_shaders[temp_formid] = shader_formid;
+        }
+
+		// containers
+		if (transformer["containers"] && !transformer["containers"].IsNull()) {
+			const auto temp_containers = transformer["containers"].IsScalar() ? std::vector{ transformer["containers"].as<std::string>() } : transformer["containers"].as<std::vector<std::string>>();
+			for (const auto& container : temp_containers) {
+				if (const FormID container_formid = GetFormEditorIDFromString(container)) {
+					settings.transformer_containers[temp_formid].insert(container_formid);
+				}
+			}
         }
     }
         
@@ -531,7 +549,6 @@ DefaultSettings parseDefaults_(const YAML::Node& config)
 			const auto shader_formid = GetFormEditorIDFromString(stageNode["effect_shader"].as<std::string>());
 			settings.effect_shaders[temp_no] = shader_formid;
         }
-
     }
     // final formid
     logger::trace("terminal item");
@@ -594,6 +611,16 @@ DefaultSettings parseDefaults_(const YAML::Node& config)
 			settings.delayer_effect_shaders[temp_formid] = shader_formid;
         }
 
+		// containers
+		if (modulator["containers"] && !modulator["containers"].IsNull()) {
+			const auto temp_containers = modulator["containers"].IsScalar() ? std::vector{ modulator["containers"].as<std::string>() } : modulator["containers"].as<std::vector<std::string>>();
+			for (const auto& container : temp_containers) {
+				if (const FormID container_formid = GetFormEditorIDFromString(container)) {
+					settings.delayer_containers[temp_formid].insert(container_formid);
+				}
+			}
+        }
+
     }
 
 	// transformers
@@ -630,6 +657,7 @@ DefaultSettings parseDefaults_(const YAML::Node& config)
 				allowed_stages.push_back(key);
 			}
         }
+
         auto temp_tuple = std::make_tuple(temp_formid2, temp_duration, allowed_stages);
         settings.transformers[temp_formid] = temp_tuple;
 		settings.transformers_order.push_back(temp_formid);
@@ -656,6 +684,17 @@ DefaultSettings parseDefaults_(const YAML::Node& config)
 			const auto shader_formid = GetFormEditorIDFromString(transformer["effect_shader"].as<std::string>());
 			settings.transformer_effect_shaders[temp_formid] = shader_formid;
         }
+
+        // containers
+		if (transformer["containers"] && !transformer["containers"].IsNull()) {
+			const auto temp_containers = transformer["containers"].IsScalar() ? std::vector{ transformer["containers"].as<std::string>() } : transformer["containers"].as<std::vector<std::string>>();
+			for (const auto& container : temp_containers) {
+				if (const FormID container_formid = GetFormEditorIDFromString(container)) {
+					settings.transformer_containers[temp_formid].insert(container_formid);
+				}
+            }
+        }
+        
     }
         
     if (!settings.CheckIntegrity()) logger::critical("Settings integrity check failed.");
