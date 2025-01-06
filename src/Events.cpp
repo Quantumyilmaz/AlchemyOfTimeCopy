@@ -169,11 +169,13 @@ RE::BSEventNotifyControl OurEventSink::ProcessEvent(const RE::TESContainerChange
     }
 
 	logger::trace("Container change event: Calling Update.");
-
-	auto item_count = event->itemCount;
-	pool.enqueue([this, from_ref, to_ref, item, item_count]() {
-        M->Update(from_ref, to_ref, item, item_count);
-    });
+    if (ui->IsMenuOpen(RE::LevelUpMenu::MENU_NAME)) {
+	    auto item_count = event->itemCount;
+	    pool.enqueue([this, from_ref, to_ref, item, item_count]() {
+            M->Update(from_ref, to_ref, item, item_count);
+        });
+	}
+	else M->Update(from_ref, to_ref, item, event->itemCount);
 
 	return RE::BSEventNotifyControl::kContinue;
 }
