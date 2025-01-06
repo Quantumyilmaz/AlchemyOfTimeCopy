@@ -11,7 +11,7 @@ void MenuHook<MenuType>::InstallHook(const REL::VariantID& varID, Manager* mngr)
 
 template <typename MenuType>
 RE::UI_MESSAGE_RESULTS MenuHook<MenuType>::ProcessMessage_Hook(RE::UIMessage& a_message) {
-    if (const std::string_view menuname = MenuType::MENU_NAME; _strcmpi(a_message.menu.c_str(), std::string(menuname).c_str()) == 0) {
+    if (const std::string_view menuname = MenuType::MENU_NAME; a_message.menu==menuname) {
         if (const auto msg_type = static_cast<int>(a_message.type.get()); msg_type == 1) {
             if (menuname == RE::FavoritesMenu::MENU_NAME) {
                 logger::trace("Favorites menu is open.");
@@ -45,5 +45,4 @@ void Hooks::Install(Manager* mngr){
     MenuHook<RE::BarterMenu>::InstallHook(RE::VTABLE_BarterMenu[0],mngr);
     MenuHook<RE::FavoritesMenu>::InstallHook(RE::VTABLE_FavoritesMenu[0],mngr);
 	MenuHook<RE::InventoryMenu>::InstallHook(RE::VTABLE_InventoryMenu[0],mngr);
-    MenuHook<RE::LockpickingMenu>::InstallHook(RE::VTABLE_LockpickingMenu[0],mngr);
 };

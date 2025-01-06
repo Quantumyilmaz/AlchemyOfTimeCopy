@@ -178,7 +178,7 @@ std::string GetEditorID(const FormID a_formid) {
 
 FormID GetFormEditorIDFromString(const std::string& formEditorId)
 {
-	constexpr std::string delimiter = "~";
+	static const std::string delimiter = "~";
 	const auto plugin_and_localid = FormReader::split(formEditorId, delimiter);
 	if (plugin_and_localid.size() == 2) {
 		const auto& plugin_name = plugin_and_localid[1];
@@ -1096,8 +1096,7 @@ std::int32_t Inventory::GetItemCount(RE::TESBoundObject* item, RE::TESObjectREFR
 bool Inventory::IsQuestItem(const FormID formid, RE::TESObjectREFR* inv_owner)
 {
     const auto inventory = inv_owner->GetInventory();
-    auto item = GetFormByID<RE::TESBoundObject>(formid);
-    if (item) {
+    if (auto item = GetFormByID<RE::TESBoundObject>(formid)) {
         if (const auto it = inventory.find(item); it != inventory.end()) {
             if (it->second.second->IsQuestObject()) return true;
         }

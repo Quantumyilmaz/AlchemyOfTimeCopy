@@ -1,4 +1,5 @@
 #include "Events.h"
+#include "Threading.h"
 
 void OurEventSink::HandleWO(RE::TESObjectREFR* ref) const
 {
@@ -90,15 +91,9 @@ RE::BSEventNotifyControl OurEventSink::ProcessEvent(const SKSE::CrosshairRefEven
 	//if (event->crosshairRef->HasContainer()) M->Update(event->crosshairRef.get());
     /*else HandleWO(event->crosshairRef.get());*/
 
-	//const auto curr_time = RE::Calendar::GetSingleton()->GetHoursPassed();
-	//if (last_crosshair_ref_update.first == event->crosshairRef->GetFormID()) {
-	//	if (curr_time - last_crosshair_ref_update.second < min_last_crosshair_update_time) return RE::BSEventNotifyControl::kContinue;
- //   }
-
     if (!event->crosshairRef->HasContainer()) HandleWO(event->crosshairRef.get());
-	else if (M->RefIsRegistered(event->crosshairRef->GetFormID())) M->Update(event->crosshairRef.get());
+    else if (M->RefIsRegistered(event->crosshairRef->GetFormID())) M->Update(event->crosshairRef.get());
 
-	//last_crosshair_ref_update = { event->crosshairRef->GetFormID(), curr_time};
         
     return RE::BSEventNotifyControl::kContinue;
 }
@@ -174,7 +169,11 @@ RE::BSEventNotifyControl OurEventSink::ProcessEvent(const RE::TESContainerChange
     }
 
 	logger::trace("Container change event: Calling Update.");
-	M->Update(from_ref, to_ref, item, event->itemCount);
+
+	auto item_count = event->itemCount;
+	pool.enqueue([this, from_ref, to_ref, item, item_count]() {
+        M->Update(from_ref, to_ref, item, item_count);
+    });
 
 	return RE::BSEventNotifyControl::kContinue;
 }

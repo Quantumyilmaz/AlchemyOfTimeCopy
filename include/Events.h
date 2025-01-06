@@ -20,7 +20,6 @@ class OurEventSink final : public RE::BSTEventSink<RE::TESEquipEvent>,
 
 
     RE::UI* ui = RE::UI::GetSingleton();
-    Manager* M = nullptr;
 
     std::atomic<bool> listen_cellchange = true;
 
@@ -36,6 +35,7 @@ class OurEventSink final : public RE::BSTEventSink<RE::TESEquipEvent>,
     void HandleWO(RE::TESObjectREFR* ref) const;
 
 public:
+    Manager* M = nullptr;
     
     OurEventSink(Manager* mngr)
         :  M(mngr){}

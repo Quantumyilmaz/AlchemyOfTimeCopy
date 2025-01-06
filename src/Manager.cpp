@@ -623,7 +623,7 @@ void Manager::UpdateWO(RE::TESObjectREFR* ref)
     if (!Settings::world_objects_evolve.load()) return;
 	if (ref->IsDeleted() || ref->IsDisabled() || ref->IsMarkedForDeletion()) return;
     if (ref->IsActivationBlocked()) return;
-    if (RE::PlayerCharacter::GetSingleton()->WouldBeStealing(ref)) return;
+    if (!Settings::unowned_objects_evolve.load() && RE::PlayerCharacter::GetSingleton()->WouldBeStealing(ref)) return;
 
     const RefID refid = ref->GetFormID();
 	const auto curr_time = RE::Calendar::GetSingleton()->GetHoursPassed();

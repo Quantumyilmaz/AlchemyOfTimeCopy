@@ -34,6 +34,11 @@ void __stdcall UI::RenderSettings()
 						IniSettingToggle(temp, setting_name, section_name, "Allows hand-placed objects (vanilla or by mods) to transform.");
 						Settings::placed_objects_evolve.store(temp);
 					}
+					else if (setting_name == "UnOwnedObjectsEvolve") {
+						bool temp = Settings::unowned_objects_evolve.load();
+						IniSettingToggle(temp, setting_name, section_name, "Allows unowned objects to transform.");
+						Settings::unowned_objects_evolve.store(temp);
+					}
                     else {
                         // we just want to display the settings in read only mode
                         ImGui::Text(setting_name.c_str());
