@@ -359,8 +359,6 @@ namespace WorldObject {
 
     RE::NiPoint3 GetPosition(const RE::TESObjectREFR* obj);
 
-    bool SearchItemInCell(FormID a_formid, RE::TESObjectCELL* a_cell, float radius);
-
     bool IsNextTo(const RE::TESObjectREFR* a_obj, const RE::TESObjectREFR* a_target,float range);
 
 };
