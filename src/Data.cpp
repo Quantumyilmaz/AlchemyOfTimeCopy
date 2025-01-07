@@ -137,7 +137,6 @@ std::map<RefID, std::vector<StageUpdate>> Source::UpdateAllStages(const std::vec
 		return updated_instances;
 	}
 
-
     for (auto& reffid : filter) {
         logger::trace("Refid in filter: {}", reffid);
         if (!data.contains(reffid)) {
@@ -337,7 +336,7 @@ bool Source::MoveInstance(const RefID from_ref, const RefID to_ref, const StageI
 
     // Get the vector of instances from the from_ref key
     std::vector<StageInstance>& from_instances = data[from_ref];
-    StageInstance new_instance(*st_inst);
+    const StageInstance new_instance(*st_inst);
 
     // Find the instance in the from_instances vector
     const auto it = std::ranges::find(from_instances, *st_inst);
@@ -422,7 +421,7 @@ Count Source::MoveInstances(const RefID from_ref, const RefID to_ref, const Form
             instance = &data[from_ref][index];
         } else {
             int shift = 0;
-            for (size_t removed_index : removed_indices) {
+            for (const size_t removed_index : removed_indices) {
                 if (index == removed_index) {
                     logger::critical("Index is equal to removed index.");
                     return count;
@@ -598,14 +597,12 @@ float Source::GetNextUpdateTime(StageInstance* st_inst) {
 
 void Source::CleanUpData()
 {
+    if (!CheckIntegrity()) {
+		logger::critical("CheckIntegrity failed");
+		InitFailed();
+    }
+
     if (init_failed) {
-        /*try{
-            logger::critical("CleanUpData: Initialisation failed. source formid: {}, qformtype: {}", formid, qFormType);
-            return;
-        } catch (const std::exception&)  {
-            logger::critical("CleanUpData: Initialisation failed.");
-            return;
-        }*/
         logger::critical("CleanUpData: Initialisation failed.");
         return;
     }
@@ -613,25 +610,8 @@ void Source::CleanUpData()
         logger::info("No data found for source {}", editorid);
         return;
     }
-	//logger::trace("Cleaning up data.");
-    //PrintData();
-    // size before cleanup
-    //logger::trace("Size before cleanup: {}", data.size());
-    // if there are instances with same stage no and location, and start_time, merge them
-        
-    //logger::trace("Cleaning up data: Deleting locs with empty vector of instances.");
-    for (auto it = data.begin(); it != data.end();) {
-        if (it->second.empty()) {
-            logger::trace("Erasing key from data: {}", it->first);
-            it = data.erase(it);
-        } else {
-            ++it;
-        }
-    }
-
-        
+	
     const auto curr_time = RE::Calendar::GetSingleton()->GetHoursPassed();
-    //logger::trace("Cleaning up data: Merging instances which are AlmostSameExceptCount.");
     for (auto& instances : data | std::views::values) {
         if (instances.empty()) continue;
         if (instances.size() > 1) {
@@ -650,44 +630,21 @@ void Source::CleanUpData()
 		    }
         }
         for (auto it = instances.begin(); it != instances.end();) {
-			if (it->count <= 0) {
-				logger::trace("Erasing stage instance with count {}", it->count);
-                it = instances.erase(it);
-            } 
-            else if (!IsStageNo(it->no) || it->xtra.is_decayed) {
-				logger::trace("Erasing decayed stage instance with no {}", it->no);
-                it = instances.erase(it);
-            } else if (curr_time - GetDecayTime(*it) > static_cast<float>(Settings::nForgettingTime)) {
-                logger::trace("Erasing stage instance that has decayed {} days ago", Settings::nForgettingTime/24);
-				it = instances.erase(it);
-			} else if (it->start_time > curr_time) {
-                logger::warn("Erasing stage instance that comes from the future?!");
-				it = instances.erase(it);
-			}
-            else {
-                //logger::trace("Not erasing stage instance with count {}", it->count);
-				++it;
-			}
+            const bool should_erase = 
+                (it->count <= 0) ||
+                (it->start_time > curr_time) ||
+                (it->xtra.is_decayed || !IsStageNo(it->no)) ||
+                (curr_time - GetDecayTime(*it) > static_cast<float>(Settings::nForgettingTime));
+
+            if (should_erase) it = instances.erase(it);
+            else ++it;
 		}
     }
         
-    //logger::trace("Cleaning up data: Deleting locs with empty vector of instances 2.");
     for (auto it = data.begin(); it != data.end();) {
-        if (it->second.empty()) {
-            logger::trace("Erasing key from data: {} 2", it->first);
-            it = data.erase(it);
-        } else {
-            ++it;
-        }
+        if (it->second.empty()) it = data.erase(it);
+        else ++it;
     }
-        
-    if (!CheckIntegrity()) {
-		logger::critical("CheckIntegrity failed");
-		InitFailed();
-    }
-
-    //logger::trace("Size after cleanup: {}", data.size());
-    //logger::trace("Cleaning up data: Done.");
 }
 
 void Source::PrintData()
