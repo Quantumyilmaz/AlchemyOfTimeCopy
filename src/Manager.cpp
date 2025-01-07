@@ -1252,15 +1252,12 @@ void Manager::ReceiveData()
 
 void Manager::Print()
 {
-#ifndef NDEBUG
-#else
     return;
-#endif  // !NDEBUG
-    logger::info("Printing sources...Current time: {}", RE::Calendar::GetSingleton()->GetHoursPassed());
+    /*logger::info("Printing sources...Current time: {}", RE::Calendar::GetSingleton()->GetHoursPassed());
     for (auto& src : sources) {
         if (src.data.empty()) continue;
         src.PrintData();
-    }
+    }*/
 }
 
 void Manager::HandleDynamicWO(RE::TESObjectREFR* ref)
