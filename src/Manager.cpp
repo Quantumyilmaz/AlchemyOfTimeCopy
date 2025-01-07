@@ -184,7 +184,6 @@ Source* Manager::ForceGetSource(const FormID some_formid)
     }
     
 	if (const auto* customSetting = Settings::GetCustomSetting(some_form)) return MakeSource(some_formid, customSetting);
-    logger::trace("No existing source and no custom settings found for the formid {}", some_formid);
 	if (const auto* defaultSetting = Settings::GetDefaultSetting(some_formid)) return MakeSource(some_formid, defaultSetting);
 
     // stage item olarak dusunulduyse, custom a baslangic itemi olarak koymali
@@ -230,18 +229,15 @@ inline void Manager::ApplyStageInWorld_Fake(RE::TESObjectREFR* wo_ref, const cha
         logger::error("ExtraTextDisplayData is null.");
         return;
     }
-    logger::trace("Setting text display data for fake wo.");
     wo_ref->extraList.RemoveByType(RE::ExtraDataType::kTextDisplayData);
     const auto xText = RE::BSExtraData::Create<RE::ExtraTextDisplayData>();
     xText->SetName(xname);
-    logger::trace("{}", xText->displayName);
     wo_ref->extraList.Add(xText);
 }
 
 void Manager::ApplyStageInWorld(RE::TESObjectREFR* wo_ref, const Stage& stage, RE::TESBoundObject* source_bound)
 {
     if (!source_bound) {
-        logger::trace("Setting ObjectReference to custom stage form.");
         WorldObject::SwapObjects(wo_ref, stage.GetBound());
         wo_ref->extraList.RemoveByType(RE::ExtraDataType::kTextDisplayData);
     }
@@ -258,9 +254,6 @@ void Manager::ApplyStageInWorld(RE::TESObjectREFR* wo_ref, const Stage& stage, R
 
 inline void Manager::ApplyEvolutionInInventoryX(RE::TESObjectREFR* inventory_owner, Count update_count, FormID old_item, FormID new_item)
 {
-    logger::trace("Updating stage in inventory of {} Count {} , Old item {} , New item {}",
-                      inventory_owner->GetName(), update_count, old_item, new_item);
-
     auto* old_bound = RE::TESForm::LookupByID<RE::TESBoundObject>(old_item);
     if (!old_bound) {
         logger::error("Old item is null.");
@@ -299,14 +292,10 @@ inline void Manager::ApplyEvolutionInInventoryX(RE::TESObjectREFR* inventory_own
     }
 
     RemoveItem(inventory_owner, old_item, inv_count);
-    logger::trace("Stage updated in inventory.");
 }
 
 inline void Manager::ApplyEvolutionInInventory_(RE::TESObjectREFR* inventory_owner, Count update_count, FormID old_item, FormID new_item)
 {
-    logger::trace("Updating stage in inventory of {} Count {} , Old item {} , New item {}",
-                    inventory_owner->GetName(), update_count, old_item, new_item);
-
     if (update_count <= 0) {
         logger::error("Update count is 0 or less {}.", update_count);
         return;
@@ -338,7 +327,6 @@ inline void Manager::ApplyEvolutionInInventory_(RE::TESObjectREFR* inventory_own
     }
     RemoveItem(inventory_owner, old_item, std::min(update_count, inv_count));
     AddItem(inventory_owner, nullptr, new_item, update_count);
-    logger::trace("Stage updated in inventory.");
 }
 
 
@@ -357,7 +345,6 @@ void Manager::ApplyEvolutionInInventory(const std::string& _qformtype_, RE::TESO
         return;
     }
     if (old_item == new_item) {
-        logger::trace("ApplyEvolutionInInventory: New item is the same as the old item.");
         return;
     }
 
@@ -367,12 +354,11 @@ void Manager::ApplyEvolutionInInventory(const std::string& _qformtype_, RE::TESO
         is_faved = IsPlayerFavorited(RE::TESForm::LookupByID<RE::TESBoundObject>(old_item));
         is_equipped = IsEquipped(RE::TESForm::LookupByID<RE::TESBoundObject>(old_item));
     }
-    if (Vector::HasElement<std::string>(Settings::xQFORMS, _qformtype_)) {
+    if (is_faved || is_equipped || Vector::HasElement<std::string>(Settings::xQFORMS, _qformtype_)) {
         ApplyEvolutionInInventoryX(inventory_owner, update_count, old_item, new_item);
-    } else if (is_faved || is_equipped) {
-        ApplyEvolutionInInventoryX(inventory_owner, update_count, old_item, new_item);
-    } else
+    } else {
         ApplyEvolutionInInventory_(inventory_owner, update_count, old_item, new_item);
+    }
 
     if (is_faved) FavoriteItem(RE::TESForm::LookupByID<RE::TESBoundObject>(new_item), inventory_owner);
     if (is_equipped) {
@@ -411,7 +397,6 @@ inline void Manager::RemoveItem(RE::TESObjectREFR* moveFrom, const FormID item_i
 
 void Manager::AddItem(RE::TESObjectREFR* addTo, RE::TESObjectREFR* addFrom, const FormID item_id, const Count count)
 {
-    logger::trace("AddItem");
     if (!addTo) {
         logger::critical("add to is null!");
         return;
@@ -431,12 +416,8 @@ void Manager::AddItem(RE::TESObjectREFR* addTo, RE::TESObjectREFR* addFrom, cons
         }
     }
 
-    logger::trace("Adding item.");
-
 	if (auto* bound = RE::TESForm::LookupByID<RE::TESBoundObject>(item_id)) {
-		logger::trace("Adding item to container.");
 		addTo->AddObjectToContainer(bound, nullptr, count, addFrom);
-        logger::trace("Item added to container.");
 	}
 	else logger::critical("Bound is null.");
 }
@@ -499,31 +480,25 @@ bool Manager::UpdateInventory(RE::TESObjectREFR* ref, const float t)
 		for (const auto& update : updates) {
 			ApplyEvolutionInInventory(src.qFormType, ref, update.count, update.oldstage->formid, update.newstage->formid);
 			if (src.IsDecayedItem(update.newstage->formid)) {
-                logger::trace("UpdateInventory: Decayed item. Source formid {} editorid {}", src.formid, src.editorid);
                 Register(update.newstage->formid, update.count, refid, t);
 			}
 		}
     }
 
     for (auto& src : sources) src.UpdateTimeModulationInInventory(ref, t);
-    logger::trace("DONE");
 
     return update_took_place;
 }
 
 void Manager::UpdateInventory(RE::TESObjectREFR* ref)
 {
-    
-	logger::trace("UpdateInventory: {}", ref->GetName());
-
     listen_container_change.store(false);
-	
+
 	SyncWithInventory(ref);
     
     // if there are time modulators which can also evolve, they need to be updated first
 	const auto curr_time = RE::Calendar::GetSingleton()->GetHoursPassed();
     while (true){
-        logger::trace("START");
 		const auto times = GetUpdateTimes(ref);
 		if (times.empty()) break;
         if (const auto t = *times.begin() + 0.000028f; t >= curr_time) break;
@@ -539,7 +514,8 @@ void Manager::UpdateInventory(RE::TESObjectREFR* ref)
 }
 
 void Manager::SyncWithInventory(RE::TESObjectREFR* ref)
-{   
+{
+
 	const auto loc_refid = ref->GetFormID();
 
     // handle discrepancies in inventory vs registries
@@ -583,11 +559,9 @@ void Manager::SyncWithInventory(RE::TESObjectREFR* ref)
         const auto inventory_count = it != loc_inventory.end() ? it->second.first : 0;
         auto diff = total_registry_count - inventory_count;
         if (diff == 0) {
-            //logger::trace("SyncWithInventory: Nothing to remove.");
             continue;
         }
         if (diff < 0) {
-            //logger::warn("SyncWithInventory: Something could have gone wrong with registration.");
 			Register(formid, -diff, loc_refid, current_time);
             continue;
         }
@@ -649,7 +623,6 @@ void Manager::UpdateWO(RE::TESObjectREFR* ref)
             const auto bound = src.IsFakeStage(update.newstage->no) ? src.GetBoundObject() : nullptr;
             ApplyStageInWorld(ref, *update.newstage, bound);
             if (src.IsDecayedItem(update.newstage->formid)) {
-                logger::trace("UpdateWO: Decayed item. Source formid {} editorid {}", src.formid, src.editorid);
 		        Register(update.newstage->formid, update.count, refid, update.update_time);
             }
         }
@@ -673,7 +646,9 @@ void Manager::UpdateWO(RE::TESObjectREFR* ref)
 
 void Manager::UpdateRef(RE::TESObjectREFR* loc)
 {
-    if (loc->HasContainer()) UpdateInventory(loc);
+    if (loc->HasContainer()) {
+        UpdateInventory(loc);
+    }
 	else UpdateWO(loc);
 
     for (auto& src : sources) {
