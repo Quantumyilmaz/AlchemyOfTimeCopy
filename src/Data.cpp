@@ -36,7 +36,6 @@ void Source::Init(const DefaultSettings* defaultsettings) {
         InitFailed();
         return;
     }
-    logger::trace("Source initializing with QFormType: {}", qFormType);
 
 	// get settings
 	settings = *defaultsettings;
@@ -125,7 +124,6 @@ void Source::UpdateAddons()
 }
 
 std::map<RefID, std::vector<StageUpdate>> Source::UpdateAllStages(const std::vector<RefID>& filter, const float time) {
-    logger::trace("Updating all stages.");
     if (init_failed) {
         logger::critical("UpdateAllStages: Initialisation failed.");
         return {};
@@ -138,7 +136,6 @@ std::map<RefID, std::vector<StageUpdate>> Source::UpdateAllStages(const std::vec
 	}
 
     for (auto& reffid : filter) {
-        logger::trace("Refid in filter: {}", reffid);
         if (!data.contains(reffid)) {
 			logger::warn("Refid {} not found in data.", reffid);
 			continue;
@@ -451,8 +448,6 @@ Count Source::MoveInstances(const RefID from_ref, const RefID to_ref, const Form
             removed_indices.push_back(index);
         }
     }
-    //logger::trace("MoveInstances: Printing data...");
-    //PrintData();
     return count;
 }
 
@@ -526,7 +521,6 @@ inline FormID Source::GetTransformerInWorld(const RE::TESObjectREFR* wo) const
 
 void Source::UpdateTimeModulationInInventory(RE::TESObjectREFR* inventory_owner, const float _time)
 {
-    //logger::trace("Updating time modulation in inventory for time {}",_time);
     if (!inventory_owner) {
         logger::error("Inventory owner is null.");
         return;
@@ -549,7 +543,6 @@ void Source::UpdateTimeModulationInInventory(RE::TESObjectREFR* inventory_owner,
 	}
 
     if (data.at(inventory_owner_refid).empty()) {
-        logger::trace("No instances found for inventory owner {} and source {}", inventory_owner_refid, editorid);
         return;
     }
 
@@ -622,7 +615,6 @@ void Source::CleanUpData()
 				    if (it == it2) continue;
                     if (it2->count <= 0) continue;
                     if (it->AlmostSameExceptCount(*it2, curr_time)) {
-                        logger::trace("Merging stage instances with count {} and {}", it->count, it2->count);
 					    it->count += it2->count;
 					    it2->count = 0;
 				    }
@@ -677,7 +669,6 @@ void Source::PrintData()
 
 void Source::Reset()
 {
-    logger::trace("Resetting source.");
     formid = 0;
 	editorid = "";
 	stages.clear();
@@ -688,7 +679,6 @@ void Source::Reset()
 bool Source::UpdateStageInstance(StageInstance& st_inst, const float curr_time) {
     if (st_inst.xtra.is_decayed) return false;  // decayed
     if (st_inst.xtra.is_transforming) {
-        logger::trace("Transforming stage found.");
         if (const auto transformer_form_id = st_inst.GetDelayerFormID(); !settings.transformers.contains(transformer_form_id)) {
 			logger::error("Transformer Formid {} not found in default settings.", transformer_form_id);
             st_inst.RemoveTransform(curr_time);
@@ -697,34 +687,27 @@ bool Source::UpdateStageInstance(StageInstance& st_inst, const float curr_time) 
             const auto& transform_properties = settings.transformers[transformer_form_id];
             const auto trnsfrm_duration = std::get<1>(transform_properties);
             if (const auto trnsfrm_elapsed = st_inst.GetTransformElapsed(curr_time); trnsfrm_elapsed >= trnsfrm_duration) {
-                logger::trace("Transform duration {} h exceeded.", trnsfrm_duration);
                 const auto& transformed_stage = transformed_stages[transformer_form_id];
                 st_inst.xtra.form_id = transformed_stage.formid;
                 st_inst.SetNewStart(curr_time, trnsfrm_elapsed - trnsfrm_duration);
                 return true;
             }
-            logger::trace("Transform duration {} h not exceeded.", trnsfrm_duration);
             return false;
         }
 
     } 
     else if (GetNStages() < 2 && GetFinalStage().formid == st_inst.xtra.form_id) {
-		logger::trace("Only one stage found and it is the same as decayed stage.");
         st_inst.SetNewStart(curr_time, 0);
 		return false;
 	}
     if (!IsStageNo(st_inst.no)) {
-        logger::trace("Stage {} does not exist.", st_inst.no);
 		return false;
 	}
     if (st_inst.count <= 0) {
-        logger::trace("Count is less than or equal 0.");
         return false;
     }
     float diff = st_inst.GetElapsed(curr_time);
     bool updated = false;
-    logger::trace("Current time: {}, Start time: {}, Diff: {}, Duration: {}", curr_time, st_inst.start_time, diff,
-                    GetStage(st_inst.no).duration);
         
     while (diff < 0) {
         if (st_inst.no > 0) {
@@ -733,7 +716,6 @@ bool Source::UpdateStageInstance(StageInstance& st_inst, const float curr_time) 
                 return false;
 			}
             st_inst.no--;
-            logger::trace("Updating stage {} to {}", st_inst.no, st_inst.no - 1);
             diff += GetStage(st_inst.no).duration;
             updated = true;
         } else {
@@ -742,12 +724,10 @@ bool Source::UpdateStageInstance(StageInstance& st_inst, const float curr_time) 
         }
     }
     while (diff >= GetStage(st_inst.no).duration) {
-        logger::trace("Updating stage {} to {}", st_inst.no, st_inst.no + 1);
         diff -= GetStage(st_inst.no).duration;
 		st_inst.no++;
         updated = true;
         if (!IsStageNo(st_inst.no)) {
-			logger::trace("Decayed");
             st_inst.xtra.is_decayed= true;
             st_inst.xtra.form_id = decayed_stage.formid;
             st_inst.xtra.editor_id = clib_util::editorID::get_editorID(decayed_stage.GetBound());
