@@ -168,14 +168,7 @@ RE::BSEventNotifyControl OurEventSink::ProcessEvent(const RE::TESContainerChange
 		//else to_ref = WorldObject::TryToGetRefInCell(event->baseObj,event->itemCount);
     }
 
-	logger::trace("Container change event: Calling Update.");
-    if (ui->IsMenuOpen(RE::LevelUpMenu::MENU_NAME)) {
-	    auto item_count = event->itemCount;
-	    pool.enqueue([this, from_ref, to_ref, item, item_count]() {
-            M->Update(from_ref, to_ref, item, item_count);
-        });
-	}
-	else M->Update(from_ref, to_ref, item, event->itemCount);
+	M->Update(from_ref, to_ref, item, event->itemCount);
 
 	return RE::BSEventNotifyControl::kContinue;
 }
