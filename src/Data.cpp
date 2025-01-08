@@ -332,7 +332,7 @@ bool Source::MoveInstance(const RefID from_ref, const RefID to_ref, const StageI
     }
 
     // Get the vector of instances from the from_ref key
-    std::vector<StageInstance>& from_instances = data[from_ref];
+    auto& from_instances = data.at(from_ref);
     const StageInstance new_instance(*st_inst);
 
     // Find the instance in the from_instances vector

@@ -7,7 +7,7 @@ struct Source {
     using SourceData = std::map<RefID,std::vector<StageInstance>>;
     using StageDict = std::map<StageNo, Stage>;
 
-    SourceData data;  // change this to a map with refid as key and vector of instances as value
+    SourceData data;
 
     FormID formid = 0;
     std::string editorid;

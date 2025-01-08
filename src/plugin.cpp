@@ -1,4 +1,5 @@
 #include "MCP.h"
+#include "Threading.h"
 
 Manager* M = nullptr;
 OurEventSink* eventSink = nullptr;
@@ -14,7 +15,10 @@ void OnMessage(SKSE::MessagingInterface::Message* message) {
         }
 
 		// 2) Load settings
-        LoadSettings();
+        {
+			SpeedProfiler prof("LoadSettings");
+            LoadSettingsParallel();
+        }
         if (Settings::failed_to_load) {
             MsgBoxesNotifs::InGame::CustomMsg("Failed to load settings. Check log for details.");
             M->Uninstall();
@@ -154,5 +158,6 @@ SKSEPluginLoad(const SKSE::LoadInterface *skse) {
     SKSE::Init(skse);
     InitializeSerialization();
     SKSE::GetMessagingInterface()->RegisterListener(OnMessage);
+	logger::info("Number of threads: {}", numThreads);
     return true;
 }

@@ -1,11 +1,31 @@
 #include "Settings.h"
+
+#include <future>
 #include <utility>
 #include "SimpleIni.h"
+#include "Threading.h"
 
+
+using QFormChecker = bool(*)(const RE::TESForm*);
+
+static const std::unordered_map<std::string, QFormChecker> qformCheckers = {
+    // POPULATE THIS
+	{"FOOD", [](const auto form) {return IsFoodItem(form); } },
+	{"INGR", [](const auto form) {return FormIsOfType(form, RE::IngredientItem::FORMTYPE); } },
+	{"MEDC", [](const auto form) {return IsMedicineItem(form); } },
+	{"POSN", [](const auto form) {return IsPoisonItem(form); } },
+	{"ARMO", [](const auto form) {return FormIsOfType(form, RE::TESObjectARMO::FORMTYPE); } },
+	{"WEAP", [](const auto form) {return FormIsOfType(form, RE::TESObjectWEAP::FORMTYPE); } },
+	{"SCRL", [](const auto form) {return FormIsOfType(form, RE::ScrollItem::FORMTYPE); } },
+	{"BOOK", [](const auto form) {return FormIsOfType(form, RE::TESObjectBOOK::FORMTYPE); } },
+	{"SLGM", [](const auto form) {return FormIsOfType(form, RE::TESSoulGem::FORMTYPE); } },
+	{"MISC", [](const auto form) {return FormIsOfType(form, RE::TESObjectMISC::FORMTYPE); } },
+	//{"NPC", [](const auto form) {return FormIsOfType(form, RE::TESNPC::FORMTYPE); } }
+};
 
 bool Settings::IsQFormType(const FormID formid, const std::string& qformtype) {
     // POPULATE THIS
-    const auto* form = GetFormByID(formid);
+    /*const auto* form = GetFormByID(formid);
     if (qformtype == "FOOD") return IsFoodItem(form);
     if (qformtype == "INGR") return FormIsOfType(form, RE::IngredientItem::FORMTYPE);
     if (qformtype == "MEDC") return IsMedicineItem(form);
@@ -17,7 +37,11 @@ bool Settings::IsQFormType(const FormID formid, const std::string& qformtype) {
     if (qformtype == "SLGM") return FormIsOfType(form, RE::TESSoulGem::FORMTYPE);
 	if (qformtype == "MISC") return FormIsOfType(form,RE::TESObjectMISC::FORMTYPE);
 	if (qformtype == "NPC") return FormIsOfType(form,RE::TESNPC::FORMTYPE);
-    return false;
+    return false;*/
+
+    const auto* form = GetFormByID(formid);
+    auto it = qformCheckers.find(qformtype);
+    return (it != qformCheckers.end()) ? it->second(form) : false;
 }
 
 std::string Settings::GetQFormType(const FormID formid)
@@ -46,7 +70,6 @@ bool Settings::IsInExclude(const FormID formid, std::string type) {
         
     if (type.empty()) type = GetQFormType(formid);
     if (type.empty()) {
-        //logger::trace("Type is empty. for formid: {}", formid);
 		return false;
 	}
     if (!Settings::exclude_list.contains(type)) {
@@ -57,13 +80,11 @@ bool Settings::IsInExclude(const FormID formid, std::string type) {
     std::string form_string = std::string(form->GetName());
 
     if (std::string form_editorid = clib_util::editorID::get_editorID(form); !form_editorid.empty() && String::includesWord(form_editorid, Settings::exclude_list[type])) {
-		logger::trace("Form is in exclude list.form_editorid: {}", form_editorid);
 		return true;
 	}
 
     /*const auto exlude_list = LoadExcludeList(postfix);*/
     if (String::includesWord(form_string, Settings::exclude_list[type])) {
-        logger::trace("Form is in exclude list.form_string: {}", form_string);
         return true;
     }
     return false;
@@ -113,15 +134,12 @@ DefaultSettings* Settings::GetDefaultSetting(const FormID form_id)
     const auto qform_type = Settings::GetQFormType(form_id);
 
     if (!IsItem(form_id, qform_type, true)) {
-        logger::trace("Not an item.");
         return nullptr;
     }
     if (!defaultsettings.contains(qform_type)) {
-        logger::trace("No default settings found for the qform_type {}", qform_type);
         return nullptr;
     }
     if (!defaultsettings[qform_type].IsHealthy()) {
-        logger::trace("Default settings not loaded for the qform_type {}", qform_type);
         return nullptr;
     }
 
@@ -203,7 +221,6 @@ void SaveSettings()
 std::vector<std::string> LoadExcludeList(const std::string& postfix)
  {
     const auto folder_path = "Data/SKSE/Plugins/AlchemyOfTime/" + postfix + "/exclude";
-    //logger::trace("Exclude path: {}", folder_path);
 
     // Create folder if it doesn't exist
     std::filesystem::create_directories(folder_path);
@@ -227,11 +244,9 @@ std::vector<std::string> LoadExcludeList(const std::string& postfix)
 
 AddOnSettings parseAddOns_(const YAML::Node& config)
 {
-    logger::trace("Parsing addon settings.");
     AddOnSettings settings;
 
     // containers
-    logger::trace("containers");
     if (config["containers"] && !config["containers"].IsNull()) {
 		const auto temp_containers = config["containers"].IsScalar() ? std::vector{config["containers"].as<std::string>()} : config["containers"].as<std::vector<std::string>>();
 		for (const auto& container : temp_containers) {
@@ -242,7 +257,6 @@ AddOnSettings parseAddOns_(const YAML::Node& config)
     } 
 
     // delayers
-    logger::trace("timeModulators");
     for (const auto& modulator : config["timeModulators"]) {
         const auto temp_formeditorid = modulator["FormEditorID"] && !modulator["FormEditorID"].IsNull()
                                             ? modulator["FormEditorID"].as<std::string>()
@@ -371,74 +385,17 @@ std::map<FormID, AddOnSettings> parseAddOns(const std::string& _type)
 
     for (const auto& entry : std::filesystem::directory_iterator(folder_path)) {
         if (!entry.is_regular_file() || entry.path().extension() != ".yml") continue;
-
         const auto filename = entry.path().string();
-
-		logger::info("Parsing file: {}", filename);
-
-        if (FileIsEmpty(filename)) {
-			logger::info("File is empty: {}", filename);
-			continue;
-        }
-
-        YAML::Node config = YAML::LoadFile(filename);
-
-        if (!config["formsLists"] || config["formsLists"].IsNull()) {
-			logger::warn("formsLists not found in {}", filename);
-			continue;
-		}
-		if (config["formsLists"].size() == 0) {
-			logger::warn("formsLists is empty in {}", filename);
-			continue;
-        }
-
-        for (const auto& Node_ : config["formsLists"]){
-			if (!Node_["forms"]) {
-				logger::warn("Forms not found in {}", filename);
-				continue;
-			}
-            // we have list of owners at each node or a scalar owner
-            if (Node_["forms"].IsScalar()) {
-                const auto ownerName = Node_["forms"].as<std::string>();
-                if (auto temp_settings = parseAddOns_(Node_); temp_settings.CheckIntegrity()) {
-					if (const auto formID = GetFormEditorIDFromString(ownerName)) {
-						_addon_settings[formID] = temp_settings;
-					}
-					else {
-                        logger::error("Formid could not be obtained for {}", ownerName);
-                    }
-                }
-                else {
-					logger::error("Settings integrity check failed for {}", ownerName);
-                }
-            } 
-            else {
-				std::set<FormID> owners;
-                for (const auto& owner : Node_["forms"]) {
-                    if (const auto formID = GetFormEditorIDFromString(owner.as<std::string>())) {
-                        logger::error("Formid: {}", formID);
-                        owners.insert(formID);
-                    }
-					else logger::error("Formid could not be obtained for {}", owner.as<std::string>());
-				}
-
-                if (auto temp_settings = parseAddOns_(Node_); temp_settings.CheckIntegrity()) {
-					for (const auto owner : owners) {
-						_addon_settings[owner] = temp_settings;
-					}
-				}
-				else {
-					logger::error("Settings integrity check failed for forms starting with {}", *owners.begin());
-                }
-			}
-        }
+        processAddOnFile(filename,_addon_settings);
     }
     return _addon_settings;
 }
 
 DefaultSettings parseDefaults_(const YAML::Node& config)
  {
+#ifndef NDEBUG
     logger::trace("Parsing settings.");
+#endif
     DefaultSettings settings;
 
     //we have:stages, decayedFormEditorID and delayers
@@ -453,7 +410,9 @@ DefaultSettings parseDefaults_(const YAML::Node& config)
 		}
         const auto temp_no = stageNode["no"].as<StageNo>();
         // add to numbers
+#ifndef NDEBUG
         logger::trace("Stage no: {}", temp_no);
+#endif
         settings.numbers.push_back(temp_no);
         const auto temp_formeditorid = stageNode["FormEditorID"] && !stageNode["FormEditorID"].IsNull()
                                             ? stageNode["FormEditorID"].as<std::string>()
@@ -466,13 +425,19 @@ DefaultSettings parseDefaults_(const YAML::Node& config)
             return {};
         }
         // add to items
+#ifndef NDEBUG
         logger::trace("Formid");
+#endif
         settings.items[temp_no] = temp_formid;
         // add to durations
+#ifndef NDEBUG
         logger::trace("Duration");
+#endif
         settings.durations[temp_no] = stageNode["duration"].as<Duration>();
         // add to stage_names
+#ifndef NDEBUG
         logger::trace("Name");
+#endif
         if (!stageNode["name"].IsNull()) {
             const auto temp_name = stageNode["name"].as<StageName>();
             // if it is empty, or just whitespace, set it to empty
@@ -481,28 +446,38 @@ DefaultSettings parseDefaults_(const YAML::Node& config)
 			else settings.stage_names[temp_no] = stageNode["name"].as<StageName>();
         } else settings.stage_names[temp_no] = "";
         // add to costoverrides
+#ifndef NDEBUG
         logger::trace("Cost");
+#endif
         if (stageNode["value"] && !stageNode["value"].IsNull()) {
             settings.costoverrides[temp_no] = stageNode["value"].as<int>();
         } else settings.costoverrides[temp_no] = -1;
         // add to weightoverrides
+#ifndef NDEBUG
         logger::trace("Weight");
+#endif
         if (stageNode["weight"] && !stageNode["weight"].IsNull()) {
             settings.weightoverrides[temp_no] = stageNode["weight"].as<float>();
         } else settings.weightoverrides[temp_no] = -1.0f;
             
         // add to crafting_allowed
+#ifndef NDEBUG
         logger::trace("Crafting");
+#endif
         if (stageNode["crafting_allowed"] && !stageNode["crafting_allowed"].IsNull()){
             settings.crafting_allowed[temp_no] = stageNode["crafting_allowed"].as<bool>();
         } else settings.crafting_allowed[temp_no] = false;
 
 
         // add to effects
+#ifndef NDEBUG
         logger::trace("Effects");
+#endif
         std::vector<StageEffect> effects;
         if (!stageNode["mgeffect"] || stageNode["mgeffect"].size() == 0) {
+#ifndef NDEBUG
 			logger::trace("Effects are empty. Skipping.");
+#endif
         } else {
             for (const auto& effectNode : stageNode["mgeffect"]) {
                 const auto temp_effect_formeditorid =
@@ -523,35 +498,45 @@ DefaultSettings parseDefaults_(const YAML::Node& config)
         settings.effects[temp_no] = effects;
 
 		// add to colors
+#ifndef NDEBUG
 		logger::trace("Color");
+#endif
 		if (stageNode["color"] && !stageNode["color"].IsNull()) {
 			settings.colors[temp_no] = std::stoul(stageNode["color"].as<std::string>(), nullptr, 16);
 		}
 		else settings.colors[temp_no] = 0;
 
 		// add to sounds
+#ifndef NDEBUG
 		logger::trace("Sound");
+#endif
 		if (stageNode["sound"] && !stageNode["sound"].IsNull()) {
 			const auto sound_formid = GetFormEditorIDFromString(stageNode["sound"].as<std::string>());
 			settings.sounds[temp_no] = sound_formid;
         }
 
 		// add to art_objects
+#ifndef NDEBUG
 		logger::trace("ArtObject");
+#endif
 		if (stageNode["art_object"] && !stageNode["art_object"].IsNull()) {
 			const auto art_formid = GetFormEditorIDFromString(stageNode["art_object"].as<std::string>());
 			settings.artobjects[temp_no] = art_formid;
         }
 
 		// add to effect_shaders
+#ifndef NDEBUG
 		logger::trace("EffectShader");
+#endif
 		if (stageNode["effect_shader"] && !stageNode["effect_shader"].IsNull()) {
 			const auto shader_formid = GetFormEditorIDFromString(stageNode["effect_shader"].as<std::string>());
 			settings.effect_shaders[temp_no] = shader_formid;
         }
     }
     // final formid
+#ifndef NDEBUG
     logger::trace("terminal item");
+#endif
     const FormID temp_decayed_id =
         config["finalFormEditorID"] && !config["finalFormEditorID"].IsNull()
 			? GetFormEditorIDFromString(config["finalFormEditorID"].as<std::string>())
@@ -560,11 +545,15 @@ DefaultSettings parseDefaults_(const YAML::Node& config)
         logger::error("Decayed id is 0.");
         return {};
     }
+#ifndef NDEBUG
     logger::trace("Decayed id: {}", temp_decayed_id);
+#endif
     settings.decayed_id = temp_decayed_id;
 
     // containers
+#ifndef NDEBUG
     logger::trace("containers");
+#endif
     if (config["containers"] && !config["containers"].IsNull()) {
 		const auto temp_containers = config["containers"].IsScalar() ? std::vector{config["containers"].as<std::string>()} : config["containers"].as<std::vector<std::string>>();
 		for (const auto& container : temp_containers) {
@@ -575,7 +564,9 @@ DefaultSettings parseDefaults_(const YAML::Node& config)
     } 
 
     // delayers
+#ifndef NDEBUG
     logger::trace("timeModulators");
+#endif
     for (const auto& modulator : config["timeModulators"]) {
         const auto temp_formeditorid = modulator["FormEditorID"] && !modulator["FormEditorID"].IsNull()
                                             ? modulator["FormEditorID"].as<std::string>()
@@ -731,49 +722,210 @@ CustomSettings parseCustoms(const std::string& _type)
     CustomSettings _custom_settings;
     const auto folder_path = "Data/SKSE/Plugins/AlchemyOfTime/" + _type + "/custom";
     std::filesystem::create_directories(folder_path);
-    //logger::info("Custom path: {}", folder_path);
         
     for (const auto& entry : std::filesystem::directory_iterator(folder_path)) {
-
         if (entry.is_regular_file() && entry.path().extension() == ".yml") {
             const auto filename = entry.path().string();
-
-            if (FileIsEmpty(filename)) {
-				logger::info("File is empty: {}", filename);
-				continue;
-            }
-
-            YAML::Node config = YAML::LoadFile(filename);
-
-            if (!config["ownerLists"]) {
-				logger::warn("OwnerLists not found in {}", filename);
-				continue;
-			}
-
-            for (const auto& Node_ : config["ownerLists"]){
-				if (!Node_["owners"]) {
-					logger::warn("Owners not found in {}", filename);
-					continue;
-				}
-                // we have list of owners at each node or a scalar owner
-                if (Node_["owners"].IsScalar()) {
-                    const auto ownerName = Node_["owners"].as<std::string>();
-                    if (auto temp_settings = parseDefaults_(Node_); temp_settings.CheckIntegrity())
-                        _custom_settings[std::vector<std::string>{ownerName}] = temp_settings;
-			    } 
-                else {
-				    std::vector<std::string> owners;
-                    for (const auto& owner : Node_["owners"]) {
-					    owners.push_back(owner.as<std::string>());
-				    }
-
-                    if (auto temp_settings = parseDefaults_(Node_); temp_settings.CheckIntegrity())
-                        _custom_settings[owners] = temp_settings;
-			    }
-            }
+            processCustomFile(filename,_custom_settings);
         }
     }
     return _custom_settings;
+}
+
+CustomSettings parseCustomsParallel(const std::string& _type)
+{
+    CustomSettings combinedSettings;
+    const auto folder_path = "Data/SKSE/Plugins/AlchemyOfTime/" + _type + "/custom";
+    std::filesystem::create_directories(folder_path);
+
+    // Gather all .yml filenames in the directory
+    std::vector<std::string> filenames;
+    for (const auto& entry : std::filesystem::directory_iterator(folder_path)) {
+        if (entry.is_regular_file() && entry.path().extension() == ".yml") {
+            filenames.push_back(entry.path().string());
+        }
+    }
+
+    // Reserve space for futures
+    std::vector<std::future<void>> futures;
+    futures.reserve(filenames.size());
+
+    // Create a thread pool with available hardware threads
+    ThreadPool pool(numThreads);
+
+    // Enqueue a task for each file. Each task will parse and merge its file.
+    for (const auto& filename : filenames) {
+        futures.emplace_back(
+            pool.enqueue([filename, &combinedSettings]() {
+                processCustomFile(filename, combinedSettings);
+            })
+        );
+    }
+
+    // Wait for all tasks to complete
+    for (auto& fut : futures) {
+        fut.get();
+    }
+
+    // Return the fully merged settings after all threads are done
+    return combinedSettings;
+}
+
+std::map<FormID, AddOnSettings> parseAddOnsParallel(const std::string& _type)
+{
+	std::map<FormID, AddOnSettings> combinedSettings;
+	const auto folder_path = "Data/SKSE/Plugins/AlchemyOfTime/" + _type + "/addon";
+	std::filesystem::create_directories(folder_path);
+	// Gather all .yml filenames in the directory
+	std::vector<std::string> filenames;
+	for (const auto& entry : std::filesystem::directory_iterator(folder_path)) {
+		if (entry.is_regular_file() && entry.path().extension() == ".yml") {
+			filenames.push_back(entry.path().string());
+		}
+	}
+	std::vector<std::future<void>> futures;
+	futures.reserve(filenames.size());
+	ThreadPool pool(numThreads);
+	for (const auto& filename : filenames) {
+		futures.emplace_back(
+			pool.enqueue([filename, &combinedSettings]() {
+				processAddOnFile(filename, combinedSettings);
+				})
+		);
+	}
+	// Wait for all tasks to complete
+	for (auto& fut : futures) {
+		fut.get();
+	}
+	return combinedSettings;
+}
+
+
+void processCustomFile(std::string filename, CustomSettings& combinedSettings)
+{
+	CustomSettings fileResult;
+    if (FileIsEmpty(filename)) {
+		logger::info("File is empty: {}", filename);
+		return;
+    }
+
+    YAML::Node config = YAML::LoadFile(filename);
+
+    if (!config["ownerLists"]) {
+		logger::warn("OwnerLists not found in {}", filename);
+		return;
+	}
+
+    for (const auto& Node_ : config["ownerLists"]){
+		if (!Node_["owners"]) {
+			logger::warn("Owners not found in {}", filename);
+			return;
+		}
+        // we have list of owners at each node or a scalar owner
+        if (Node_["owners"].IsScalar()) {
+            const auto ownerName = Node_["owners"].as<std::string>();
+            if (auto temp_settings = parseDefaults_(Node_); temp_settings.CheckIntegrity()) {
+                fileResult[std::vector{ownerName}] = temp_settings;
+            }
+		} 
+        else {
+			std::vector<std::string> owners;
+            for (const auto& owner : Node_["owners"]) {
+				owners.push_back(owner.as<std::string>());
+			}
+
+            if (auto temp_settings = parseDefaults_(Node_); temp_settings.CheckIntegrity()) {
+                fileResult[owners] = temp_settings;
+            }
+		}
+    }
+
+    if (!fileResult.empty()) {
+        std::lock_guard lock(g_settingsMutex);
+		mergeCustomSettings(combinedSettings, fileResult);
+    }
+}
+
+void processAddOnFile(std::string filename, std::map<FormID, AddOnSettings>& combinedSettings)
+{
+    logger::info("Parsing file: {}", filename);
+
+	std::map<FormID, AddOnSettings> fileResult;
+
+    if (FileIsEmpty(filename)) {
+		logger::info("File is empty: {}", filename);
+		return;
+    }
+
+    YAML::Node config = YAML::LoadFile(filename);
+
+    if (!config["formsLists"] || config["formsLists"].IsNull()) {
+		logger::warn("formsLists not found in {}", filename);
+		return;
+	}
+	if (config["formsLists"].size() == 0) {
+		logger::warn("formsLists is empty in {}", filename);
+		return;
+    }
+
+    for (const auto& Node_ : config["formsLists"]){
+		if (!Node_["forms"]) {
+			logger::warn("Forms not found in {}", filename);
+			return;
+		}
+        // we have list of owners at each node or a scalar owner
+        if (Node_["forms"].IsScalar()) {
+            const auto ownerName = Node_["forms"].as<std::string>();
+            if (auto temp_settings = parseAddOns_(Node_); temp_settings.CheckIntegrity()) {
+				if (const auto formID = GetFormEditorIDFromString(ownerName)) {
+					fileResult[formID] = temp_settings;
+				}
+				else {
+                    logger::error("Formid could not be obtained for {}", ownerName);
+                }
+            }
+            else {
+				logger::error("Settings integrity check failed for {}", ownerName);
+            }
+        } 
+        else {
+			std::set<FormID> owners;
+            for (const auto& owner : Node_["forms"]) {
+                if (const auto formID = GetFormEditorIDFromString(owner.as<std::string>())) {
+                    logger::error("Formid: {}", formID);
+                    owners.insert(formID);
+                }
+				else logger::error("Formid could not be obtained for {}", owner.as<std::string>());
+			}
+
+            if (auto temp_settings = parseAddOns_(Node_); temp_settings.CheckIntegrity()) {
+				for (const auto owner : owners) {
+					fileResult[owner] = temp_settings;
+				}
+			}
+			else {
+				logger::error("Settings integrity check failed for forms starting with {}", *owners.begin());
+            }
+		}
+    }
+
+	if (!fileResult.empty()) {
+		std::lock_guard lock(g_settingsMutex);
+		mergeAddOnSettings(combinedSettings, fileResult);
+    }
+}
+
+void mergeCustomSettings(CustomSettings& dest, const CustomSettings& src) {
+    for (const auto& [owners, settings] : src) {
+        dest[owners] = settings;
+    }
+}
+
+void mergeAddOnSettings(std::map<FormID, AddOnSettings>& dest, const std::map<FormID, AddOnSettings>& src)
+{
+	for (const auto& [formID, settings] : src) {
+		dest[formID] = settings;
+	}
 }
 
 void LoadINISettings()
@@ -854,8 +1006,7 @@ void LoadJSONSettings()
 	Settings::ticker_speed = Settings::Ticker::from_string(ticker["speed"].GetString());
 }
 
-void LoadSettings()
-{
+void LoadSettings() {
     logger::info("Loading settings.");
     try {
         LoadINISettings();
@@ -872,10 +1023,13 @@ void LoadSettings()
     for (const auto& [key,val]: Settings::INI_settings["Modules"]) {
         if (val) Settings::QFORMS.push_back(key);
 	}
+
     for (const auto& _qftype: Settings::QFORMS) {
         try {
             logger::info("Loading defaultsettings for {}", _qftype);
-			if (auto temp_default_settings = parseDefaults(_qftype); !temp_default_settings.IsEmpty()) Settings::defaultsettings[_qftype] = temp_default_settings;
+			if (auto temp_default_settings = parseDefaults(_qftype); !temp_default_settings.IsEmpty()) {
+                Settings::defaultsettings[_qftype] = temp_default_settings;
+			}
         } catch (const std::exception& ex) {
             logger::critical("Failed to load default settings for {}: {}", _qftype, ex.what());
             Settings::failed_to_load = true;
@@ -883,14 +1037,13 @@ void LoadSettings()
         }
         try {
             logger::info("Loading custom settings for {}", _qftype);
-			if (auto temp_custom_settings = parseCustoms(_qftype); !temp_custom_settings.empty()) Settings::custom_settings[_qftype] = temp_custom_settings;
+			if (auto temp_custom_settings = parseCustoms(_qftype); !temp_custom_settings.empty()) {
+                Settings::custom_settings[_qftype] = temp_custom_settings;
+			}
         } catch (const std::exception& ex) {
 			logger::critical("Failed to load custom settings for {}: {}", _qftype, ex.what());
 			Settings::failed_to_load = true;
             return;
-        }
-        for (const auto& key : Settings::custom_settings[_qftype] | std::views::keys) {
-            logger::trace("Key: {}", key.front());
         }
         try {
 			logger::info("Loading exclude list for {}", _qftype);
@@ -910,6 +1063,99 @@ void LoadSettings()
 			return;
 		}
 	}
+
+	try {
+		LoadJSONSettings();
+	}
+	catch (const std::exception& ex) {
+		logger::critical("Failed to load json settings: {}", ex.what());
+		Settings::failed_to_load = true;
+		return;
+	}
+}
+
+void LoadSettingsParallel()
+{
+    logger::info("Loading settings.");
+    try {
+        LoadINISettings();
+    } catch (const std::exception& ex) {
+		logger::critical("Failed to load ini settings: {}", ex.what());
+		Settings::failed_to_load = true;
+		return;
+	}
+    if (!Settings::INI_settings.contains("Modules")) {
+        logger::critical("Modules section not found in ini settings.");
+		Settings::failed_to_load = true;
+		return;
+	}
+    for (const auto& [key,val]: Settings::INI_settings["Modules"]) {
+        if (val) Settings::QFORMS.push_back(key);
+	}
+
+    std::vector<std::future<void>> typeFutures;
+	typeFutures.reserve(Settings::QFORMS.size());
+	ThreadPool typePool(numThreads);
+
+    std::mutex defaultsettingsMutex;
+	std::mutex customsettingsMutex;
+	std::mutex excludeListMutex;
+	std::mutex addonsettingsMutex;
+
+
+    for (const auto& _qftype: Settings::QFORMS) {
+        typeFutures.push_back(typePool.enqueue([_qftype,&defaultsettingsMutex,&customsettingsMutex,&excludeListMutex,&addonsettingsMutex]() {
+                    try {
+                        logger::info("Loading defaultsettings for {}", _qftype);
+			            if (auto temp_default_settings = parseDefaults(_qftype); !temp_default_settings.IsEmpty()) {
+							std::lock_guard lock(defaultsettingsMutex);
+                            Settings::defaultsettings[_qftype] = temp_default_settings;
+			            }
+                    } catch (const std::exception& ex) {
+                        logger::critical("Failed to load default settings for {}: {}", _qftype, ex.what());
+                        Settings::failed_to_load = true;
+                        return;
+                    }
+                    try {
+                        logger::info("Loading custom settings for {}", _qftype);
+			            if (auto temp_custom_settings = parseCustomsParallel(_qftype); !temp_custom_settings.empty()) {
+							std::lock_guard lock(customsettingsMutex);
+                            Settings::custom_settings[_qftype] = temp_custom_settings;
+			            }
+                    } catch (const std::exception& ex) {
+			            logger::critical("Failed to load custom settings for {}: {}", _qftype, ex.what());
+			            Settings::failed_to_load = true;
+                        return;
+                    }
+                    try {
+			            logger::info("Loading exclude list for {}", _qftype);
+						std::lock_guard lock(excludeListMutex);
+                        Settings::exclude_list[_qftype] = LoadExcludeList(_qftype);
+                    } catch (const std::exception& ex) {
+			            logger::critical("Failed to load exclude list for {}: {}", _qftype, ex.what());
+                        Settings::failed_to_load = true;
+                        return;
+                    }
+		            try {
+			            logger::info("Loading addons for {}", _qftype);
+						std::lock_guard lock(addonsettingsMutex);
+		                Settings::addon_settings[_qftype] = parseAddOnsParallel(_qftype);
+		            }
+		            catch (const std::exception& ex) {
+			            logger::critical("Failed to load addons for {}: {}", _qftype, ex.what());
+			            Settings::failed_to_load = true;
+			            return;
+		            }
+			    }
+            )
+		);
+	}
+
+	for (auto& fut : typeFutures) {
+		fut.get();
+	}
+
+
 	try {
 		LoadJSONSettings();
 	}

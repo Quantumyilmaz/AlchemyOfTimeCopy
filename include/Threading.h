@@ -66,4 +66,22 @@ private:
 };
 
 // Create a global thread pool instance
-inline ThreadPool pool(std::thread::hardware_concurrency());
+inline size_t numThreads = std::max(1u, std::thread::hardware_concurrency());
+//inline ThreadPool pool(numThreads);
+
+
+class SpeedProfiler {
+	std::chrono::time_point<std::chrono::steady_clock> start_time;
+	std::chrono::time_point<std::chrono::steady_clock> end_time;
+	std::string name;
+public:
+    explicit SpeedProfiler(const std::string& name) {
+		start_time = std::chrono::steady_clock::now();
+		this->name = name;
+	}
+	~SpeedProfiler() {
+		end_time = std::chrono::steady_clock::now();
+		std::chrono::duration<double> elapsed_seconds = end_time - start_time;
+		logger::info("Elapsed time: {}", elapsed_seconds.count());
+	}
+};
