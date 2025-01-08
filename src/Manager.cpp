@@ -1,4 +1,5 @@
 #include "Manager.h"
+#include <unordered_set>
 
 void Manager::WoUpdateLoop(const std::vector<RefID>& refs)
 {
@@ -472,6 +473,7 @@ bool Manager::UpdateInventory(RE::TESObjectREFR* ref, const float t)
         const auto updated_stages = src.UpdateAllStages({refid}, t);
 		const auto& updates = updated_stages.contains(refid) ? updated_stages.at(refid) : std::vector<StageUpdate>();
 		if (!update_took_place && !updates.empty()) update_took_place = true;
+		CleanUpSourceData(&src);
 #ifndef NDEBUG
 		if (updates.empty()) {
 			logger::trace("UpdateInventory: No updates for source formid {} editorid {}", src.formid, src.editorid);
@@ -517,78 +519,91 @@ void Manager::SyncWithInventory(RE::TESObjectREFR* ref)
 {
 
 	const auto loc_refid = ref->GetFormID();
+    const bool needHandling = locs_to_be_handled.contains(loc_refid);
 
     // handle discrepancies in inventory vs registries
-    std::map<FormID, std::vector<StageInstance*>> formid_instances_map = {};
-    std::map<FormID, Count> total_registry_counts = {};
-
-    for (
-        //auto lock = std::shared_lock(sourceMutex_);
-        auto& src : sources) {
-        if (src.data.empty()) continue;
-        if (!src.data.contains(loc_refid)) continue;
-        for (auto& st_inst : src.data.at(loc_refid)) {  // bu liste onceski savele ayni deil cunku source.datayi
-                                                        // _registeratreceivedata deistirdi
-            if (st_inst.xtra.is_decayed) continue;
-            if (st_inst.count <= 0) continue;
-            const auto temp_formid = st_inst.xtra.form_id;
-            formid_instances_map[temp_formid].push_back(&st_inst);
-            if (!total_registry_counts.contains(temp_formid)) total_registry_counts[temp_formid] = st_inst.count;
-            else total_registry_counts[temp_formid] += st_inst.count;
-        }
-    }
+    std::unordered_map<FormID, std::vector<StageInstance*>> formid_instances_map = {};
+    std::unordered_map<FormID, Count> total_registry_counts = {};
 
     const auto loc_inventory = ref->GetInventory();
 
-    if (locs_to_be_handled.contains(loc_refid)) {
+    formid_instances_map.reserve(loc_inventory.size());
+	total_registry_counts.reserve(loc_inventory.size());
+
+    for (auto& src : sources) {
+        if (!src.data.contains(loc_refid)) continue;
+        for (auto& st_inst : src.data.at(loc_refid)) {  // bu liste onceski savele ayni deil cunku source.datayi
+                                                        // _registeratreceivedata deistirdi
+            if (!st_inst.xtra.is_decayed && st_inst.count > 0) {
+                auto& vecRef = formid_instances_map[st_inst.xtra.form_id];
+                vecRef.push_back(&st_inst);
+                auto& countRef = total_registry_counts[st_inst.xtra.form_id];
+                countRef += st_inst.count;
+            }
+        }
+    }
+
+
+    if (needHandling) {
         for (const auto& [bound, entry] : loc_inventory) {
-            if (bound && IsDynamicFormID(bound->GetFormID()) &&
-                std::strlen(bound->GetName()) == 0) {
-                RemoveItem(ref, bound->GetFormID(), std::max(1, entry.first));
+            if (bound->IsDynamicForm()) {
+                const auto a_formID = bound->GetFormID();
+                auto* name = bound->GetName();
+                const auto nameLen = (name != nullptr) ? std::strlen(name) : 0;
+                if (nameLen == 0) {
+                    RemoveItem(ref, a_formID, std::max(1, entry.first));
+                }
             }
         }
     }
 
     // for every formid, handle the discrepancies
-	auto handled_formids = std::set<FormID>{};
+
 	const auto current_time = RE::Calendar::GetSingleton()->GetHoursPassed();
-    for (auto& [formid, instances] : formid_instances_map) {
-		handled_formids.insert(formid);
-        const auto it = loc_inventory.find(GetFormByID<RE::TESBoundObject>(formid));
-        const auto total_registry_count = total_registry_counts[formid];
-        const auto inventory_count = it != loc_inventory.end() ? it->second.first : 0;
-        auto diff = total_registry_count - inventory_count;
-        if (diff == 0) {
-            continue;
-        }
-        if (diff < 0) {
-			Register(formid, -diff, loc_refid, current_time);
-            continue;
-        }
-        for (const auto& instance : instances) {
-            if (const auto bound = GetFormByID<RE::TESBoundObject>(formid);
-                bound && instance->xtra.is_fake && locs_to_be_handled.contains(loc_refid)) {
-                AddItem(ref, nullptr, formid, diff);
-                break;
-            }
-            if (diff <= instance->count) {
-                instance->count -= diff;
-                break;
-            }
-            diff -= instance->count;
-            instance->count = 0;
-        }
-    }
 
     for (const auto& [bound, entry] : loc_inventory) {
 		const auto formid = bound->GetFormID();
-		if (handled_formids.contains(formid)) continue;
-		if (entry.first <= 0) continue;
-        Register(formid, entry.first, loc_refid, current_time);
-	}
+		const auto inventory_count = entry.first;
+		if (!formid_instances_map.contains(formid)) {
+			if (inventory_count > 0) {
+				Register(formid, inventory_count, loc_refid, current_time);
+			}
+		}
+        else {
+            const auto total_registry_count = total_registry_counts[formid];
+            if (auto diff = total_registry_count - inventory_count; diff < 0) {
+			    Register(formid, -diff, loc_refid, current_time);
+            }
+            else if (diff > 0) {
+                for (auto* instance : formid_instances_map.at(formid)) {
+                    if (instance->xtra.is_fake && needHandling) {
+                        AddItem(ref, nullptr, formid, diff);
+                        break;
+                    }
+                    if (diff <= instance->count) {
+                        instance->count -= diff;
+                        break;
+                    }
+                    diff -= instance->count;
+                    instance->count = 0;
+                }
+            }
+        }
+		formid_instances_map.erase(formid);
+    }
+
+    for (const auto& [formid,instances]:formid_instances_map) {
+		for (auto* instance : instances) {
+			if (instance->xtra.is_fake && needHandling) {
+				AddItem(ref, nullptr, formid, instance->count);
+			}
+			else {
+				instance->count = 0;
+			}
+		}
+    }
 
 	locs_to_be_handled.erase(loc_refid);
-
 }
 
 void Manager::UpdateWO(RE::TESObjectREFR* ref)
@@ -637,6 +652,7 @@ void Manager::UpdateWO(RE::TESObjectREFR* ref)
 			UpdateRefStop(src, wo_inst, a_ref_stop, next_update);
             QueueWOUpdate(a_ref_stop);
         }
+		CleanUpSourceData(&src);
 		break;
     }
 
@@ -651,10 +667,10 @@ void Manager::UpdateRef(RE::TESObjectREFR* loc)
     }
 	else UpdateWO(loc);
 
-    for (auto& src : sources) {
-		if (src.data.empty()) continue;
-		CleanUpSourceData(&src);
-	}
+ //   for (auto& src : sources) {
+	//	if (src.data.empty()) continue;
+	//	CleanUpSourceData(&src);
+	//}
 }
 
 RefStop* Manager::GetRefStop(const RefID refid)
@@ -757,7 +773,7 @@ void Manager::Register(const FormID some_formid, const Count count, const RefID 
             logger::error("Register: InsertNewInstance failed 2.");
         }
         else {
-            auto bound = src->IsFakeStage(stage_no) ? src->GetBoundObject() : nullptr;
+            const auto bound = src->IsFakeStage(stage_no) ? src->GetBoundObject() : nullptr;
             ApplyStageInWorld(ref, src->GetStage(stage_no), bound);
 		    // add to the queue
 		    const auto hitting_time = src->GetNextUpdateTime(inserted_instance);
@@ -1236,15 +1252,12 @@ void Manager::ReceiveData()
 
 void Manager::Print()
 {
-#ifndef NDEBUG
-#else
     return;
-#endif  // !NDEBUG
-    logger::info("Printing sources...Current time: {}", RE::Calendar::GetSingleton()->GetHoursPassed());
+    /*logger::info("Printing sources...Current time: {}", RE::Calendar::GetSingleton()->GetHoursPassed());
     for (auto& src : sources) {
         if (src.data.empty()) continue;
         src.PrintData();
-    }
+    }*/
 }
 
 void Manager::HandleDynamicWO(RE::TESObjectREFR* ref)

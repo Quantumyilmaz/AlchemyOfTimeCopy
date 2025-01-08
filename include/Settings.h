@@ -119,7 +119,7 @@ namespace Settings {
     inline std::vector<std::string> QFORMS;
     inline std::map<std::string,DefaultSettings> defaultsettings;
     inline std::map<std::string, CustomSettings> custom_settings;
-    inline std::map <std::string,std::vector<std::string>> exclude_list;
+    inline std::unordered_map<std::string,std::vector<std::string>> exclude_list;
     inline std::map<std::string,std::map<FormID, AddOnSettings>> addon_settings;
 
     [[nodiscard]] bool IsQFormType(FormID formid, const std::string& qformtype);
@@ -166,15 +166,27 @@ namespace Settings {
     };
 };
 
+inline std::mutex g_settingsMutex;
+
 std::vector<std::string> LoadExcludeList(const std::string& postfix);
 AddOnSettings parseAddOns_(const YAML::Node& config);
 std::map<FormID, AddOnSettings> parseAddOns(const std::string& _type);
 DefaultSettings parseDefaults_(const YAML::Node& config);
 DefaultSettings parseDefaults(std::string _type);
 CustomSettings parseCustoms(const std::string& _type);
+
+CustomSettings parseCustomsParallel(const std::string& _type);
+std::map<FormID, AddOnSettings> parseAddOnsParallel(const std::string& _type);
+void processCustomFile(std::string filename, CustomSettings& combinedSettings);
+void processAddOnFile(std::string filename, std::map<FormID, AddOnSettings>& combinedSettings);
+void mergeCustomSettings(CustomSettings& dest, const CustomSettings& src);
+void mergeAddOnSettings(std::map<FormID, AddOnSettings>& dest, const std::map<FormID, AddOnSettings>& src);
+
+
 void LoadINISettings();
 void LoadJSONSettings();
 void LoadSettings();
+void LoadSettingsParallel();
 void SaveSettings();
 
 
