@@ -1116,7 +1116,7 @@ StageInstance* Manager::RegisterAtReceiveData(const FormID source_formid, const 
                             _instance_limit));
         }
 
-        logger::trace("Registering new instance.Formid {} , Count {} , Location refid {}", source_formid, count, loc);
+        logger::trace("Registering new instance.Formid {:x} , Count {} , Location refid {:x}", source_formid, count, loc);
         // make new registry
 
         auto* src = ForceGetSource(source_formid);

@@ -36,7 +36,7 @@ struct Stage {
     Stage(const FormID f, const Duration d, const StageNo s, StageName n, const bool ca, const std::vector<StageEffect>& e, const uint32_t color_ = 0)
         : formid(f), duration(d), no(s), name(std::move(n)), mgeffect(e) ,crafting_allowed(ca), color(color_) {
         if (!formid) logger::critical("FormID is null");
-        else logger::trace("Stage: FormID {}, Duration {}, StageNo {}, Name {}", formid, duration, no, name);
+        else logger::trace("Stage: FormID {:x}, Duration {}, StageNo {}, Name {}", formid, duration, no, name);
         if (e.empty()) mgeffect.clear();
         if (duration <= 0) {
 			logger::critical("Duration is 0 or negative");
