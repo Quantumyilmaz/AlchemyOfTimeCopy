@@ -1,5 +1,7 @@
 #include "Hooks.h"
 
+#include "DrawDebug.h"
+
 using namespace Hooks;
 
 template <typename MenuType>
@@ -45,4 +47,21 @@ void Hooks::Install(Manager* mngr){
     MenuHook<RE::BarterMenu>::InstallHook(RE::VTABLE_BarterMenu[0],mngr);
     MenuHook<RE::FavoritesMenu>::InstallHook(RE::VTABLE_FavoritesMenu[0],mngr);
 	MenuHook<RE::InventoryMenu>::InstallHook(RE::VTABLE_InventoryMenu[0],mngr);
+	UpdateHook::Install();
 };
+
+void UpdateHook::Update(RE::Actor* a_this, float a_delta)
+{
+        Update_(a_this, a_delta);
+#ifndef NDEBUG
+        DebugAPI_IMPL::DebugAPI::Update();
+#endif
+}
+
+void UpdateHook::Install() {
+#ifndef NDEBUG
+    REL::Relocation<std::uintptr_t> PlayerCharacterVtbl{ RE::VTABLE_PlayerCharacter[0] };
+	Update_ = PlayerCharacterVtbl.write_vfunc(0xAD, Update);
+#endif
+}
+

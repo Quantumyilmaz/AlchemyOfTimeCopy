@@ -17,4 +17,11 @@ namespace Hooks {
     public:
         static void InstallHook(const REL::VariantID& varID, Manager* mngr);
     };
+
+    struct UpdateHook {
+        static inline RE::TESObjectREFR* object = nullptr;
+		static void Update(RE::Actor* a_this, float a_delta);
+        static inline REL::Relocation<decltype(Update)> Update_;
+		static void Install();
+	};
 };
