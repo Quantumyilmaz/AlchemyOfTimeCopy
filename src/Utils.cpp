@@ -1,9 +1,10 @@
 #include "Utils.h"
-
 #include <numbers>
-
 #include "FormIDReader.h"
 #include "Settings.h"
+#include "DrawDebug.h"
+#include <d3d11.h>
+#pragma comment(lib, "d3d11.lib")
 
 bool Types::FormEditorID::operator<(const FormEditorID& other) const
 {
@@ -530,9 +531,7 @@ float WorldObject::GetDistanceFromPlayer(const RE::TESObjectREFR* ref)
 		logger::error("Ref is null.");
 		return 0;
 	}
-    const auto player_pos = RE::PlayerCharacter::GetSingleton()->GetPosition();
-    const auto ref_pos = ref->GetPosition();
-	return player_pos.GetDistance(ref_pos);
+	return RE::PlayerCharacter::GetSingleton()->GetPosition().GetDistance(ref->GetPosition());
 }
 
 bool WorldObject::PlayerPickUpObject(RE::TESObjectREFR* item, const Count count, const unsigned int max_try) {
@@ -686,6 +685,260 @@ bool WorldObject::IsNextTo(const RE::TESObjectREFR* a_obj, const RE::TESObjectRE
     if (distance < (a_obj_eff_rad + a_target_eff_rad)*Settings::search_scaling + range) {
         return true;
     }
+	return false;
+}
+
+std::array<RE::NiPoint3, 8> WorldObject::GetBoundingBox(const RE::TESObjectREFR* a_obj)
+{
+    //using namespace Math::LinAlg;
+    const auto center = GetPosition(a_obj);
+	const Math::LinAlg::Geometry geometry(a_obj);
+	auto [min, max] = geometry.GetBoundingBox();
+
+	min = center + min;
+	max = center + max;
+
+	const auto obj_angle = a_obj->GetAngle();
+
+	const auto v1 = Math::LinAlg::Geometry::Rotate(RE::NiPoint3(min.x, min.y, min.z) - center, obj_angle) + center;
+	const auto v2 = Math::LinAlg::Geometry::Rotate(RE::NiPoint3(max.x, min.y, min.z) - center, obj_angle) + center;
+	const auto v3 = Math::LinAlg::Geometry::Rotate(RE::NiPoint3(max.x, max.y, min.z) - center, obj_angle) + center;
+	const auto v4 = Math::LinAlg::Geometry::Rotate(RE::NiPoint3(min.x, max.y, min.z) - center, obj_angle) + center;
+
+	const auto v5 = Math::LinAlg::Geometry::Rotate(RE::NiPoint3(min.x, min.y, max.z) - center, obj_angle) + center;
+	const auto v6 = Math::LinAlg::Geometry::Rotate(RE::NiPoint3(max.x, min.y, max.z) - center, obj_angle) + center;
+	const auto v7 = Math::LinAlg::Geometry::Rotate(RE::NiPoint3(max.x, max.y, max.z) - center, obj_angle) + center;
+	const auto v8 = Math::LinAlg::Geometry::Rotate(RE::NiPoint3(min.x, max.y, max.z) - center, obj_angle) + center;
+
+	//logger::trace("v1 ({},{},{}), v2 ({},{},{}), v3 ({},{},{}), v4 ({},{},{}), v5 ({},{},{}), v6 ({},{},{}), v7 ({},{},{}), v8 ({},{},{})",
+	//		v1.x, v1.y, v1.z,
+	//		v2.x, v2.y, v2.z,
+	//		v3.x, v3.y, v3.z,
+	//		v4.x, v4.y, v4.z,
+	//		v5.x, v5.y, v5.z,
+	//		v6.x, v6.y, v6.z,
+	//		v7.x, v7.y, v7.z,
+	//	    v8.x, v8.y, v8.z
+	//);
+
+	return { v1,v2,v3,v4,v5,v6,v7,v8 };
+}
+
+void WorldObject::DrawBoundingBox(const RE::TESObjectREFR* a_obj)
+{
+    const auto boundingBox = GetBoundingBox(a_obj);
+	DrawBoundingBox(boundingBox);
+}
+
+void WorldObject::DrawBoundingBox(const std::array<RE::NiPoint3, 8>& a_box)
+{
+    const auto& v1 = a_box[0];
+	const auto& v2 = a_box[1];
+	const auto& v3 = a_box[2];
+	const auto& v4 = a_box[3];
+	const auto& v5 = a_box[4];
+	const auto& v6 = a_box[5];
+	const auto& v7 = a_box[6];
+	const auto& v8 = a_box[7];
+
+	// Draw bottom face
+	draw_line(v1, v2, 1);
+	draw_line(v2, v3, 1);
+	draw_line(v3, v4, 1);
+	draw_line(v4, v1, 1);
+
+	// Draw top face
+	draw_line(v5, v6, 1);
+	draw_line(v6, v7, 1);
+	draw_line(v7, v8, 1);
+	draw_line(v8, v5, 1);
+
+	// Connect bottom and top faces
+	draw_line(v1, v5, 1);
+	draw_line(v2, v6, 1);
+	draw_line(v3, v7, 1);
+	draw_line(v4, v8, 1);
+}
+
+bool WorldObject::IsInBoundingBox(const std::array<RE::NiPoint3, 8>& a_box, const RE::NiPoint3& a_point)
+{
+    //const auto v1 = rotate(RE::NiPoint3(min.x, min.y, min.z) - center, obj_angle) + center;
+	//const auto v2 = rotate(RE::NiPoint3(max.x, min.y, min.z) - center, obj_angle) + center;
+	//const auto v3 = rotate(RE::NiPoint3(max.x, max.y, min.z) - center, obj_angle) + center;
+	//const auto v4 = rotate(RE::NiPoint3(min.x, max.y, min.z) - center, obj_angle) + center;
+
+	//const auto v5 = rotate(RE::NiPoint3(min.x, min.y, max.z) - center, obj_angle) + center;
+	//const auto v6 = rotate(RE::NiPoint3(max.x, min.y, max.z) - center, obj_angle) + center;
+	//const auto v7 = rotate(RE::NiPoint3(max.x, max.y, max.z) - center, obj_angle) + center;
+	//const auto v8 = rotate(RE::NiPoint3(min.x, max.y, max.z) - center, obj_angle) + center;
+
+	const auto v_x = a_box[1] - a_box[0];
+	const auto v_y = a_box[3] - a_box[0];
+	const auto v_z = a_box[4] - a_box[0];
+	const auto width = v_x.Length();
+	const auto length = v_y.Length();
+	const auto height = v_z.Length();
+	const auto n_x = v_x / width;
+	const auto n_y = v_y / length;
+	const auto n_z = v_z / height;
+
+	const auto v_rel = a_point - a_box[0];
+
+	if (const auto comp = n_x.Dot(v_rel); comp > width || comp<0.f) {
+		return false;
+	}
+	if (const auto comp = n_y.Dot(v_rel); comp > length || comp < 0.f) {
+		return false;
+	}
+	if (const auto comp = n_z.Dot(v_rel); comp > height || comp < 0.f) {
+		return false;
+	}
+
+	return true;
+}
+
+bool WorldObject::IsInTriangle(const RE::NiPoint3& A, const RE::NiPoint3& B, const RE::NiPoint3& C,
+    const RE::NiPoint3& P) {
+    const RE::NiPoint3 v0 = C - A;
+    const RE::NiPoint3 v1 = B - A;
+    const RE::NiPoint3 v2 = P - A;
+
+    // Compute dot products
+	const float dot00 = v0.Dot(v0);
+	const float dot01 = v0.Dot(v1);
+	const float dot02 = v0.Dot(v2);
+	const float dot11 = v1.Dot(v1);
+	const float dot12 = v1.Dot(v2);
+
+    // Compute barycentric coordinates
+    const float denom = dot00 * dot11 - dot01 * dot01;
+    if (denom == 0) return false; // Degenerate triangle
+
+    const float u = (dot11 * dot02 - dot01 * dot12) / denom;
+    const float v = (dot00 * dot12 - dot01 * dot02) / denom;
+
+    // Check if point is inside triangle
+    return (u >= 0) && (v >= 0) && (u + v <= 1);
+}
+
+namespace {
+    bool Is2DBoundingBox(const std::array<RE::NiPoint3,8>& a_bounding_box) {
+        // const auto v1 = rotate(RE::NiPoint3(min.x, min.y, min.z) - center, obj_angle) + center;
+	    //const auto v2 = rotate(RE::NiPoint3(max.x, min.y, min.z) - center, obj_angle) + center;
+	    //const auto v3 = rotate(RE::NiPoint3(max.x, max.y, min.z) - center, obj_angle) + center;
+	    //const auto v4 = rotate(RE::NiPoint3(min.x, max.y, min.z) - center, obj_angle) + center;
+
+	    //const auto v5 = rotate(RE::NiPoint3(min.x, min.y, max.z) - center, obj_angle) + center;
+	    //const auto v6 = rotate(RE::NiPoint3(max.x, min.y, max.z) - center, obj_angle) + center;
+	    //const auto v7 = rotate(RE::NiPoint3(max.x, max.y, max.z) - center, obj_angle) + center;
+	    //const auto v8 = rotate(RE::NiPoint3(min.x, max.y, max.z) - center, obj_angle) + center;
+
+	    const auto& v1 = a_bounding_box[0];
+	    const auto& v5 = a_bounding_box[4];
+	    if (const auto diff = fabs(v1.z - v5.z); diff > 1.f) {
+		    return false;
+	    }
+	    return true;
+
+    }
+
+	bool IsOn2DBoundingBox(const std::array<RE::NiPoint3, 4>& a_box, const RE::NiPoint3& a_point) {
+	    auto n_x = a_box[1] - a_box[0];
+	    auto n_y = a_box[3] - a_box[0];
+	    const auto width = n_x.Length();
+	    const auto length = n_y.Length();
+	    n_x /= width;
+	    n_y /= length;
+	    const auto v_rel = a_point - a_box[0];
+	    if (const auto comp = n_x.Dot(v_rel); comp > width || comp < 0.f) {
+		    return false;
+	    }
+	    if (const auto comp = n_y.Dot(v_rel); comp > length || comp < 0.f) {
+		    return false;
+	    }
+	    return true;
+    }
+
+    RE::NiPoint3 GetClosestPoint2D(const std::array<RE::NiPoint3,4>& a_2d_bounded_plane, const RE::NiPoint3& a_outside_point) {
+
+        const auto v_normal = Math::LinAlg::CalculateNormalOfPlane(a_2d_bounded_plane[1] - a_2d_bounded_plane[0], a_2d_bounded_plane[2] - a_2d_bounded_plane[0]);
+	    const auto closest_point = Math::LinAlg::closestPointOnPlane(a_2d_bounded_plane[0], a_outside_point, v_normal);
+		if (IsOn2DBoundingBox(a_2d_bounded_plane, closest_point)) {
+			return closest_point;
+		}
+		const auto closest = Math::LinAlg::GetClosest3Vertices(a_2d_bounded_plane, closest_point);
+        if (WorldObject::IsInTriangle(closest[0], closest[1], closest[2], closest_point)) {
+			return closest_point;
+		}
+        return Math::LinAlg::intersectLine(closest,closest_point);
+    }
+};
+
+RE::NiPoint3 WorldObject::GetClosestPoint(const RE::NiPoint3& a_point_from, const RE::TESObjectREFR* a_obj_to)
+{
+    const auto bounding_box = GetBoundingBox(a_obj_to);
+	if (Is2DBoundingBox(bounding_box)) {
+	    const std::array a_2d_bounded_plane = {bounding_box[0],bounding_box[1],bounding_box[2],bounding_box[3]};
+        return GetClosestPoint2D(a_2d_bounded_plane,a_point_from);
+	}
+	if (IsInBoundingBox(bounding_box, a_point_from)) {
+		return a_point_from;
+	}
+	const auto closest = Math::LinAlg::GetClosest3Vertices(bounding_box,a_point_from);
+	const auto v_normal = Math::LinAlg::CalculateNormalOfPlane(closest[1] - closest[0], closest[2] - closest[0]);
+	const auto closest_point = Math::LinAlg::closestPointOnPlane(closest[0], a_point_from, v_normal);
+#ifndef NDEBUG
+	draw_line(closest[0], closest[1], 3,glm::vec4(0.f,1.f,0.f,1.f));
+    draw_line(closest[1], closest[2], 3,glm::vec4(0.f,1.f,0.f,1.f));
+    draw_line(closest[2], closest[0], 3,glm::vec4(0.f,1.f,0.f,1.f));
+#endif
+    if (IsInTriangle(closest[0], closest[1], closest[2], closest_point)) {
+		return closest_point;
+	}
+	return Math::LinAlg::intersectLine(closest,closest_point);
+}
+
+bool WorldObject::AreClose(const RE::TESObjectREFR* a_obj1, const RE::TESObjectREFR* a_obj2, const float threshold)
+{
+//	const auto bbox1 = GetBoundingBox(a_obj1);
+//	const auto bbox2 = GetBoundingBox(a_obj2);
+//	struct vertex_pair {
+//		RE::NiPoint3 v1;
+//		RE::NiPoint3 v2;
+//        float distance;
+//	};
+//	std::vector<vertex_pair> vertex_pairs;
+//	for (const auto& v1 : bbox1) {
+//		for (const auto& v2 : bbox2) {
+//			const auto distance = v1.GetDistance(v2);
+//			vertex_pairs.push_back({ v1,v2,distance });
+//		}
+//	}
+//	// sort by distance
+//	std::ranges::sort(vertex_pairs, [](const vertex_pair& a, const vertex_pair& b) { return a.distance < b.distance; });
+//	const auto closest_3_pairs = std::vector<vertex_pair>(vertex_pairs.begin(), vertex_pairs.begin() + 3);
+//	const auto center1 = (closest_3_pairs[0].v1 + closest_3_pairs[1].v1 + closest_3_pairs[2].v1) / 3.f;
+//	const auto center2 = (closest_3_pairs[0].v2 + closest_3_pairs[1].v2 + closest_3_pairs[2].v2) / 3.f;
+//    // calculate the distance from the center of the triangles to each other
+//	const auto distance = center1.GetDistance(center2);
+//	if (distance < threshold) {
+//#ifndef NDEBUG
+//        draw_line(center1, center2, 3,glm::vec4(1.f,1.f,1.f,1.f));
+//#endif
+//		return true;
+//	}
+//	return false;
+
+
+    const auto a_obj1_center = GetPosition(a_obj1);
+	const auto closest1 = GetClosestPoint(a_obj1_center, a_obj2);
+	const auto closest2 = GetClosestPoint(closest1, a_obj1);
+	if (closest1.GetDistance(closest2) < threshold) {
+#ifndef NDEBUG
+        draw_line(closest1, closest2, 3,glm::vec4(1.f,1.f,1.f,1.f));
+#endif
+		return true;
+	}
 	return false;
 }
 
@@ -1390,4 +1643,226 @@ float Math::Ceil(const float value, const int n)
 {
     const float factor = std::powf(10.0f, n);
     return std::ceil(value * factor) / factor;
+}
+
+std::array<RE::NiPoint3, 3> Math::LinAlg::GetClosest3Vertices(const std::array<RE::NiPoint3, 8>& a_bounding_box, const RE::NiPoint3& outside_point)
+{
+    std::array<RE::NiPoint3, 3> result;
+
+    std::vector<std::pair<float,size_t>> distances;
+    for (size_t i = 0; i < a_bounding_box.size(); ++i) {
+		float dist = outside_point.GetDistance(a_bounding_box[i]);
+        distances.emplace_back(dist,i);
+    }
+    std::ranges::sort(distances);
+    for (size_t i = 0; i < 3 && i < distances.size(); ++i) {
+        const size_t index = distances[i].second;
+		result[i] = a_bounding_box[index];
+    }
+    
+	return result;
+}
+
+std::array<RE::NiPoint3, 3> Math::LinAlg::GetClosest3Vertices(const std::array<RE::NiPoint3, 4>& a_bounded_plane,
+    const RE::NiPoint3& outside_point) {
+	std::array<RE::NiPoint3, 3> result;
+
+    std::vector<std::pair<float,size_t>> distances;
+    for (size_t i = 0; i < a_bounded_plane.size(); ++i) {
+		float dist = outside_point.GetDistance(a_bounded_plane[i]);
+        distances.emplace_back(dist,i);
+    }
+    std::ranges::sort(distances);
+    for (size_t i = 0; i < 3 && i < distances.size(); ++i) {
+        const size_t index = distances[i].second;
+		result[i] = a_bounded_plane[index];
+    }
+    
+	return result;
+}
+
+RE::NiPoint3 Math::LinAlg::CalculateNormalOfPlane(const RE::NiPoint3& span1, const RE::NiPoint3& span2)
+{
+    const auto crossed = span1.Cross(span2);
+	const auto length = crossed.Length();
+	if (fabs(length)<EPSILON) {
+		return { 0,0,0 };
+	}
+	return crossed / length;
+}
+
+RE::NiPoint3 Math::LinAlg::closestPointOnPlane(const RE::NiPoint3& a_point_on_plane,
+    const RE::NiPoint3& a_point_not_on_plane, const RE::NiPoint3& v_normal) {
+    const auto distance = (a_point_not_on_plane - a_point_on_plane).Dot(v_normal);
+	return a_point_not_on_plane - v_normal * distance;
+}
+
+RE::NiPoint3 Math::LinAlg::intersectLine(const std::array<RE::NiPoint3, 3>& vertices, const RE::NiPoint3& outside_plane_point)
+{
+    const RE::NiPoint3 edge0 = vertices[1] - vertices[0]; // AtoB
+	const RE::NiPoint3 edge1 = vertices[2] - vertices[1]; // BtoC
+	const RE::NiPoint3 edge2 = vertices[0] - vertices[2]; // CtoA
+
+	const float mags[3] = { edge0.Length(), edge1.Length(), edge2.Length() };
+
+	size_t maxIndex = 0;
+    if (mags[1] > mags[maxIndex]) maxIndex = 1;
+    if (mags[2] > mags[maxIndex]) maxIndex = 2;
+
+	//[[maybe_unused]] const auto& hypotenuse = edges[index];
+	const auto index1 = (maxIndex + 1) % 3;
+	const auto index2 = (maxIndex + 2) % 3;
+
+	const auto& orthogonal_vertex = vertices[index2]; // B
+
+	for (const auto a_index : {maxIndex,index1}) {
+	    const auto& hypotenuse_vertex = vertices[a_index]; // C or A depending on closed loop orientation
+
+	    const auto temp = orthogonal_vertex-hypotenuse_vertex;
+		const auto temp_length = temp.Length();
+		if (temp_length == 0.f) continue;
+		const auto temp_unit = temp / temp_length;
+
+		const auto& other_hypotenuse_vertex = a_index == index1 ? vertices[maxIndex] : vertices[index1];
+		const auto temp2 = other_hypotenuse_vertex - orthogonal_vertex;
+		const auto temp2_length = temp2.Length();
+		if (temp2_length == 0.f) continue;
+		const auto temp2_unit = temp2 / temp2_length;
+
+		const auto theta_max = atan(temp2_length/temp_length);
+	    const auto distance_vector = outside_plane_point - hypotenuse_vertex;
+		const auto distance_vector_length = distance_vector.Length();
+		const auto distance_vector_unit = distance_vector / distance_vector_length;
+
+        if (const auto theta = acos(distance_vector_unit.Dot(temp_unit)); 
+			0.f <= theta && theta <= theta_max) {
+			if (temp2_unit.Dot(distance_vector_unit) > 0) {
+			    const auto a_span_size = tan(theta)*temp_length;
+                if (const auto intersect = temp + temp2_unit * a_span_size; 
+					intersect.Length()>distance_vector_length) {
+					return outside_plane_point; // it is inside the triangle
+				}
+				const auto normal_distance = (outside_plane_point-orthogonal_vertex).Dot(temp2_unit);
+				return temp2_unit * normal_distance + orthogonal_vertex;
+			}
+	    }
+	    
+	}
+
+	return orthogonal_vertex;
+}
+
+
+namespace {
+    UINT GetBufferLength(RE::ID3D11Buffer* reBuffer) {
+        const auto buffer = reinterpret_cast<ID3D11Buffer*>(reBuffer);
+        D3D11_BUFFER_DESC bufferDesc = {};
+        buffer->GetDesc(&bufferDesc);
+        return bufferDesc.ByteWidth;
+    }
+
+    void EachGeometry(const RE::TESObjectREFR* obj, const std::function<void(RE::BSGeometry* o3d, RE::BSGraphics::TriShape*)>& callback) {
+        if (const auto d3d = obj->Get3D()) {
+
+            RE::BSVisit::TraverseScenegraphGeometries(d3d, [&](RE::BSGeometry* a_geometry) -> RE::BSVisit::BSVisitControl {
+
+                const auto& model = a_geometry->GetGeometryRuntimeData();
+
+                if (const auto triShape = model.rendererData) {
+                    callback(a_geometry, triShape);
+                }
+
+                return RE::BSVisit::BSVisitControl::kContinue;
+            });
+
+        } 
+    }
+};
+
+void Math::LinAlg::Geometry::FetchVertices(const RE::BSGeometry* o3d, RE::BSGraphics::TriShape* triShape)
+{
+    if (const uint8_t* vertexData = triShape->rawVertexData) {
+        const uint32_t stride = triShape->vertexDesc.GetSize();
+        const auto numPoints = GetBufferLength(triShape->vertexBuffer);
+        const auto numPositions = numPoints / stride;
+        positions.reserve(positions.size() + numPositions);
+        for (uint32_t i = 0; i < numPoints; i += stride) {
+            const uint8_t* currentVertex = vertexData + i;
+
+            const auto position =
+                reinterpret_cast<const float*>(currentVertex + triShape->vertexDesc.GetAttributeOffset(
+                                                                   RE::BSGraphics::Vertex::Attribute::VA_POSITION));
+
+            auto pos = RE::NiPoint3{position[0], position[1], position[2]};
+            pos = o3d->local * pos;
+            positions.push_back(pos);
+        }
+    }
+}
+
+RE::NiPoint3 Math::LinAlg::Geometry::Rotate(const RE::NiPoint3& A, const RE::NiPoint3& angles)
+{
+    RE::NiMatrix3 R;
+    R.SetEulerAnglesXYZ(angles);
+    return R * A;
+}
+
+Math::LinAlg::Geometry::Geometry(const RE::TESObjectREFR* obj)
+{
+    this->obj = obj;
+    EachGeometry(obj, [this](const RE::BSGeometry* o3d, RE::BSGraphics::TriShape* triShape) -> void {
+        FetchVertices(o3d, triShape);
+        //FetchIndexes(triShape);
+    });
+
+    if (positions.empty()) {
+        auto from = obj->GetBoundMin();
+        auto to = obj->GetBoundMax();
+
+        if ((to - from).Length() < 1) {
+            from = {-5, -5, -5};
+            to = {5, 5, 5};
+        }
+        positions.emplace_back(from.x, from.y, from.z);
+        positions.emplace_back(to.x, from.y, from.z);
+        positions.emplace_back(to.x, to.y, from.z);
+        positions.emplace_back(from.x, to.y, from.z);
+
+        positions.emplace_back(from.x, from.y, to.z);
+        positions.emplace_back(to.x, from.y, to.z);
+        positions.emplace_back(to.x, to.y, to.z);
+        positions.emplace_back(from.x, to.y, to.z);
+    }
+}
+
+std::pair<RE::NiPoint3, RE::NiPoint3> Math::LinAlg::Geometry::GetBoundingBox() const
+{
+    auto min = RE::NiPoint3{0, 0, 0};
+    auto max = RE::NiPoint3{0, 0, 0};
+
+    for (auto i = 0; i < positions.size(); i++) {
+        //const auto p1 = Rotate(positions[i] * scale, angle);
+        const auto p1 = positions[i] * obj->GetScale();
+
+        if (p1.x < min.x) {
+            min.x = p1.x;
+        }
+        if (p1.x > max.x) {
+            max.x = p1.x;
+        }
+        if (p1.y < min.y) {
+            min.y = p1.y;
+        }
+        if (p1.y > max.y) {
+            max.y = p1.y;
+        }
+        if (p1.z < min.z) {
+            min.z = p1.z;
+        }
+        if (p1.z > max.z) {
+            max.z = p1.z;
+        }
+    }
+
+    return std::pair(min, max);
 }

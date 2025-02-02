@@ -35,7 +35,7 @@ namespace Settings {
     inline std::atomic world_objects_evolve = false;
 	inline std::atomic placed_objects_evolve = false;
 	inline std::atomic unowned_objects_evolve = false;
-    inline float proximity_range = 10.f;
+    inline float proximity_range = 40.f;
 
     inline float search_radius = -1.f;
     inline float search_scaling = 0.5f; // for IsNextTo

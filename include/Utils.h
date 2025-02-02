@@ -176,6 +176,28 @@ namespace Math {
 
             void rotate(RE::NiPoint3& v, float angleX, float angleY, float angleZ);
         };
+
+        class Geometry {
+            std::vector<RE::NiPoint3> positions;
+            std::vector<uint16_t> indexes;
+            const RE::TESObjectREFR* obj;
+
+	        void FetchVertices(const RE::BSGeometry* o3d, RE::BSGraphics::TriShape* triShape);
+
+
+        public:
+            static RE::NiPoint3 Rotate(const RE::NiPoint3& A, const RE::NiPoint3& angles);
+
+	        ~Geometry() = default;
+            explicit Geometry(const RE::TESObjectREFR* obj);
+            [[nodiscard]] std::pair<RE::NiPoint3, RE::NiPoint3> GetBoundingBox() const;
+        };
+
+        std::array<RE::NiPoint3,3> GetClosest3Vertices(const std::array<RE::NiPoint3, 8>& a_bounding_box, const RE::NiPoint3& outside_point);
+        std::array<RE::NiPoint3,3> GetClosest3Vertices(const std::array<RE::NiPoint3, 4>& a_bounded_plane, const RE::NiPoint3& outside_point);
+        RE::NiPoint3 CalculateNormalOfPlane(const RE::NiPoint3& span1, const RE::NiPoint3& span2);
+        RE::NiPoint3 closestPointOnPlane(const RE::NiPoint3& a_point_on_plane,const RE::NiPoint3& a_point_not_on_plane, const RE::NiPoint3& v_normal);
+        RE::NiPoint3 intersectLine(const std::array<RE::NiPoint3,3>& vertices, const RE::NiPoint3& outside_plane_point);
     };
 };
 
@@ -360,6 +382,15 @@ namespace WorldObject {
     RE::NiPoint3 GetPosition(const RE::TESObjectREFR* obj);
 
     bool IsNextTo(const RE::TESObjectREFR* a_obj, const RE::TESObjectREFR* a_target,float range);
+
+	std::array<RE::NiPoint3, 8> GetBoundingBox(const RE::TESObjectREFR* a_obj);
+	void DrawBoundingBox(const RE::TESObjectREFR* a_obj);
+	void DrawBoundingBox(const std::array<RE::NiPoint3, 8>& a_box);
+	bool IsInBoundingBox(const std::array<RE::NiPoint3, 8>& a_box, const RE::NiPoint3& a_point);
+    bool IsInTriangle(const RE::NiPoint3& A, const RE::NiPoint3& B, const RE::NiPoint3& C, const RE::NiPoint3& P);
+	RE::NiPoint3 GetClosestPoint(const RE::NiPoint3& a_point_from , const RE::TESObjectREFR* a_obj_to);
+
+    bool AreClose(const RE::TESObjectREFR* a_obj1, const RE::TESObjectREFR* a_obj2, float threshold);
 
 };
 

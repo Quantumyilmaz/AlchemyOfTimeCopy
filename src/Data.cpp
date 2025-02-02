@@ -1,5 +1,7 @@
 #include "Data.h"
 
+#include "DrawDebug.h"
+
 void Source::Init(const DefaultSettings* defaultsettings) {
 
 	if (!defaultsettings) {
@@ -625,10 +627,13 @@ void Source::CleanUpData()
             const bool should_erase = 
                 (it->count <= 0) ||
                 (it->start_time > curr_time) ||
-                (it->xtra.is_decayed || !IsStageNo(it->no)) ||
-                (curr_time - GetDecayTime(*it) > static_cast<float>(Settings::nForgettingTime));
+                (it->xtra.is_decayed || !IsStageNo(it->no));
 
-            if (should_erase) it = instances.erase(it);
+            auto decay_time =  GetDecayTime(*it);
+            if (should_erase || 
+                decay_time > 0.f && curr_time-decay_time > static_cast<float>(Settings::nForgettingTime)) {
+                it = instances.erase(it);
+            }
             else ++it;
 		}
     }
@@ -1099,9 +1104,16 @@ void Source::SearchModulatorInCell(FormID& result, const RE::TESObjectREFR* a_or
 			[&a_origin,&result, &modulators](const RE::TESObjectREFR* ref)-> RE::BSContainer::ForEachResult {
 				if (!ref || ref->IsDisabled() || ref->IsDeleted() || ref->IsMarkedForDeletion()) return RE::BSContainer::ForEachResult::kContinue;
 				if (const auto form_id = ref->GetObjectReference()->GetFormID(); modulators.contains(form_id)) {
-                    if (!WorldObject::IsNextTo(a_origin, ref, Settings::proximity_range)) {
+#ifndef NDEBUG
+					draw_line(WorldObject::GetPosition(ref), WorldObject::GetPosition(RE::PlayerCharacter::GetSingleton()),3.f, glm::vec4(0.f, 0.f, 1.f, 1.f));
+				    WorldObject::DrawBoundingBox(ref);
+#endif
+                    if (!WorldObject::AreClose(a_origin, ref, Settings::proximity_range)) {
 				        return RE::BSContainer::ForEachResult::kContinue;
                     }
+#ifndef NDEBUG
+					logger::info("Found modulator in proximity: {}", clib_util::editorID::get_editorID(ref->GetBaseObject()));
+#endif
 					result = form_id;
 					return RE::BSContainer::ForEachResult::kStop;
 				}
